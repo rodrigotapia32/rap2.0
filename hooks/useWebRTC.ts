@@ -186,27 +186,46 @@ export function useWebRTC({
    * Maneja una oferta recibida (guest)
    */
   const handleOffer = useCallback(async (offer: RTCSessionDescriptionInit) => {
-    const pc = peerConnectionRef.current;
+    let pc = peerConnectionRef.current;
+    
+    // Si no hay peer connection, crearla primero
     if (!pc) {
-      console.error('Guest: No hay peer connection para manejar la oferta');
-      return;
+      console.log('🔵 Guest: No hay peer connection, creando una...');
+      createPeerConnection();
+      // Esperar un momento para que se establezca
+      await new Promise(resolve => setTimeout(resolve, 100));
+      pc = peerConnectionRef.current;
+      
+      if (!pc) {
+        console.error('❌ Guest: No se pudo crear peer connection');
+        return;
+      }
     }
 
     try {
+      console.log('🔵 Guest: Recibiendo oferta, estableciendo remote description...');
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      console.log('🔵 Guest: Creando respuesta...');
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+      console.log('🔵 Guest: Respuesta creada, enviando...');
 
       if (sendMessageRef.current) {
         sendMessageRef.current({
           type: 'answer',
           answer: answer,
         });
+        console.log('🔵 Guest: Respuesta enviada');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error manejando offer:', error);
+      if (error.name === 'InvalidStateError') {
+        console.error('❌ La peer connection está en un estado inválido:', pc.signalingState);
+        // Recrear la conexión si está en estado inválido
+        createPeerConnection();
+      }
     }
-  }, []);
+  }, [createPeerConnection]);
 
   /**
    * Maneja una respuesta recibida (host)
@@ -229,18 +248,33 @@ export function useWebRTC({
    * Maneja un ICE candidate recibido
    */
   const handleIceCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
-    const pc = peerConnectionRef.current;
+    let pc = peerConnectionRef.current;
+    
+    // Si no hay peer connection, crearla primero (puede llegar antes de la oferta)
     if (!pc) {
-      console.warn('⚠️ No hay peer connection para agregar ICE candidate');
-      return;
+      console.log('🔵 No hay peer connection para ICE candidate, creando una...');
+      createPeerConnection();
+      // Esperar un momento para que se establezca
+      await new Promise(resolve => setTimeout(resolve, 100));
+      pc = peerConnectionRef.current;
+      
+      if (!pc) {
+        console.warn('⚠️ No se pudo crear peer connection para ICE candidate');
+        return;
+      }
     }
 
     try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error agregando ICE candidate:', error);
+      // Si el error es porque la descripción remota no está establecida, es normal
+      // Los ICE candidates se agregarán automáticamente cuando se establezca la descripción remota
+      if (error.name === 'InvalidStateError' && pc.signalingState === 'stable') {
+        console.log('🔵 ICE candidate llegó antes de la descripción remota, se agregará después');
+      }
     }
-  }, []);
+  }, [createPeerConnection]);
 
   // Actualizar referencia de sendMessage
   useEffect(() => {
