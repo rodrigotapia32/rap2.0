@@ -82,8 +82,15 @@ export function useWebRTC({
    * Crea y configura la conexión RTCPeerConnection
    */
   const createPeerConnection = useCallback(() => {
+    // Cerrar conexión anterior si existe
+    if (peerConnectionRef.current) {
+      console.log('🔵 Cerrando peer connection anterior...');
+      peerConnectionRef.current.close();
+    }
+    
     const pc = new RTCPeerConnection(rtcConfig);
     peerConnectionRef.current = pc;
+    console.log('🔵 Nueva peer connection creada, signalingState:', pc.signalingState);
 
     // Manejar stream remoto
     pc.ontrack = (event) => {
@@ -303,6 +310,10 @@ export function useWebRTC({
     console.log('🔵 startWebRTC llamado, verificando condiciones...');
     console.log('  - isHost:', isHost);
     console.log('  - peerConnectionRef.current:', !!peerConnectionRef.current);
+    if (peerConnectionRef.current) {
+      console.log('  - signalingState:', peerConnectionRef.current.signalingState);
+      console.log('  - connectionState:', peerConnectionRef.current.connectionState);
+    }
     console.log('  - sendMessageRef.current:', !!sendMessageRef.current);
     
     if (!isHost) {
@@ -316,13 +327,43 @@ export function useWebRTC({
       createPeerConnection();
       // Esperar un momento para que se establezca
       setTimeout(() => {
-        if (peerConnectionRef.current && sendMessageRef.current) {
-          console.log('🔵 Peer connection creada, creando oferta...');
+        const pc = peerConnectionRef.current;
+        if (pc && sendMessageRef.current) {
+          console.log('🔵 Peer connection creada, verificando estado...');
+          console.log('  - signalingState:', pc.signalingState);
+          console.log('  - connectionState:', pc.connectionState);
+          
+          // Verificar que la conexión no esté cerrada
+          if (pc.signalingState === 'closed') {
+            console.error('❌ Peer connection está cerrada, recreando...');
+            createPeerConnection();
+            setTimeout(() => {
+              if (peerConnectionRef.current && sendMessageRef.current) {
+                createOffer();
+              }
+            }, 100);
+            return;
+          }
+          
+          console.log('🔵 Estado válido, creando oferta...');
           createOffer();
         } else {
           console.error('❌ No se pudo crear peer connection o sendMessage no disponible');
         }
-      }, 100);
+      }, 200); // Aumentado a 200ms para dar más tiempo
+      return;
+    }
+    
+    // Verificar que la conexión existente no esté cerrada
+    const pc = peerConnectionRef.current;
+    if (pc.signalingState === 'closed') {
+      console.error('❌ Peer connection está cerrada, recreando...');
+      createPeerConnection();
+      setTimeout(() => {
+        if (peerConnectionRef.current && sendMessageRef.current) {
+          createOffer();
+        }
+      }, 200);
       return;
     }
     
