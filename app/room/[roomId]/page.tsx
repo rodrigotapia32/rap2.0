@@ -202,10 +202,11 @@ function RoomPageContent() {
             startBattle(message.timestamp);
             break;
           case 'user-joined':
-            console.log('🔵 user-joined recibido:', message.userId, message.nickname);
+            console.log('🔵 user-joined recibido:', message.userId, message.nickname, 'Mi userId:', userIdRef.current);
             if (message.userId !== userIdRef.current) {
               console.log('🔵 Estableciendo remoteNickname:', message.nickname);
               setRemoteNickname(message.nickname);
+              console.log('✅ remoteNickname establecido correctamente');
               // Si es host, enviar el beat seleccionado y iniciar WebRTC (solo una vez)
               if (isHost && signalingRef.current && !webrtcStartedRef.current) {
                 console.log('🔵 Host: Iniciando WebRTC...');

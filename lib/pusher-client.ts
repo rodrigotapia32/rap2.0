@@ -85,11 +85,24 @@ export class PusherSignalingClient {
             this.onMessage(data);
           });
 
-      // Escuchar cuando otros usuarios se unen (client events)
-      this.channel.bind('client-user-joined', (data: { userId: string; nickname: string }) => {
-        console.log('🔵 Recibido client-user-joined:', data);
+      // Escuchar cuando otros usuarios se unen (desde servidor)
+      this.channel.bind('user-joined', (data: { userId: string; nickname: string }) => {
+        console.log('🔵 Recibido user-joined (servidor):', data);
         if (data.userId !== this.userId) {
           console.log('🔵 Procesando user-joined de otro usuario');
+          this.onMessage({
+            type: 'user-joined',
+            userId: data.userId,
+            nickname: data.nickname,
+          });
+        }
+      });
+
+      // También escuchar client events como fallback
+      this.channel.bind('client-user-joined', (data: { userId: string; nickname: string }) => {
+        console.log('🔵 Recibido client-user-joined (fallback):', data);
+        if (data.userId !== this.userId) {
+          console.log('🔵 Procesando user-joined de otro usuario (fallback)');
           this.onMessage({
             type: 'user-joined',
             userId: data.userId,
@@ -109,38 +122,79 @@ export class PusherSignalingClient {
       });
 
       // Escuchar cuando la suscripción es exitosa
-      this.channel.bind('pusher:subscription_succeeded', () => {
+      this.channel.bind('pusher:subscription_succeeded', async () => {
         console.log('✅ Suscrito al canal de Pusher');
         this.isConnected = true;
         if (this.onConnectionChange) {
           this.onConnectionChange(true);
         }
         
-        // Notificar que el usuario se unió inmediatamente
-        console.log('🔵 Enviando user-joined...');
-        const triggered = this.trigger('user-joined', {
-          userId: this.userId,
-          nickname: this.nickname,
-        });
-        if (!triggered) {
-          console.warn('⚠️ No se pudo enviar user-joined (client events no habilitados?)');
-        }
-        
-        // Reenviar para asegurar que el otro usuario lo reciba (especialmente importante en móvil)
-        let retryCount = 0;
-        const maxRetries = 5; // Aumentado para móvil
-        const retryInterval = setInterval(() => {
-          if (retryCount < maxRetries && this.isConnected) {
-            console.log(`🔵 Reenviando user-joined (intento ${retryCount + 1}/${maxRetries})...`);
+        // Notificar que el usuario se unió usando el servidor (más confiable que client events)
+        console.log('🔵 Enviando user-joined a través del servidor...');
+        const channelName = `private-room-${this.roomId}`;
+        try {
+          const response = await fetch('/api/pusher/trigger', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              channel: channelName,
+              event: 'user-joined',
+              data: {
+                userId: this.userId,
+                nickname: this.nickname,
+              },
+            }),
+          });
+
+          if (response.ok) {
+            console.log('✅ user-joined enviado correctamente a través del servidor');
+          } else {
+            console.warn('⚠️ Error enviando user-joined por servidor, intentando client events...');
+            // Fallback a client events
             this.trigger('user-joined', {
               userId: this.userId,
               nickname: this.nickname,
             });
+          }
+        } catch (error) {
+          console.warn('⚠️ Error con servidor, usando client events como fallback:', error);
+          this.trigger('user-joined', {
+            userId: this.userId,
+            nickname: this.nickname,
+          });
+        }
+        
+        // Reenviar usando servidor para asegurar que el otro usuario lo reciba (especialmente importante en móvil)
+        let retryCount = 0;
+        const maxRetries = 3; // Reducido porque el servidor es más confiable
+        const retryInterval = setInterval(async () => {
+          if (retryCount < maxRetries && this.isConnected) {
+            console.log(`🔵 Reenviando user-joined por servidor (intento ${retryCount + 1}/${maxRetries})...`);
+            try {
+              await fetch('/api/pusher/trigger', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  channel: channelName,
+                  event: 'user-joined',
+                  data: {
+                    userId: this.userId,
+                    nickname: this.nickname,
+                  },
+                }),
+              });
+            } catch (error) {
+              console.warn('⚠️ Error en reenvío:', error);
+            }
             retryCount++;
           } else {
             clearInterval(retryInterval);
           }
-        }, 1000); // Reducido a 1 segundo para móvil
+        }, 1500); // Cada 1.5 segundos
       });
 
       // Eventos de conexión
