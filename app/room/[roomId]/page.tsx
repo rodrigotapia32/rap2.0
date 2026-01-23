@@ -119,6 +119,68 @@ function RoomPageContent() {
   };
 
   /**
+   * Reproduce el beat (usado internamente y por eventos remotos)
+   */
+  const playBeat = async (): Promise<boolean> => {
+    if (!beatAudio) return false;
+
+    try {
+      // Asegurarse de que el AudioContext esté activo
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+      }
+
+      const playPromise = beatAudio.play();
+      if (playPromise !== undefined) {
+        await playPromise;
+        console.log('✅ Beat reproducido correctamente');
+        setIsBeatPlaying(true);
+        return true;
+      }
+      return false;
+    } catch (error: any) {
+      console.error('❌ Error reproduciendo beat:', error);
+      // Intentar activar AudioContext una vez más
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+        try {
+          await audioContextRef.current.resume();
+          console.log('✅ AudioContext reactivado, reintentando...');
+          await beatAudio.play();
+          setIsBeatPlaying(true);
+          return true;
+        } catch (e) {
+          console.error('❌ Error después de reactivar AudioContext:', e);
+        }
+      }
+      return false;
+    }
+  };
+
+  /**
+   * Pausa el beat (usado internamente y por eventos remotos)
+   */
+  const pauseBeat = () => {
+    if (beatAudio) {
+      beatAudio.pause();
+      setIsBeatPlaying(false);
+      console.log('⏸️ Beat pausado');
+    }
+  };
+
+  /**
+   * Reinicia el beat (usado internamente y por eventos remotos)
+   */
+  const restartBeatInternal = async () => {
+    if (beatAudio) {
+      beatAudio.currentTime = 0;
+      if (!isBeatPlaying) {
+        await playBeat();
+      }
+      console.log('🔄 Beat reiniciado');
+    }
+  };
+
+  /**
    * Inicia la batalla cuando ambos están listos
    */
   const startBattle = async (serverTimestamp: number) => {
@@ -134,101 +196,51 @@ function RoomPageContent() {
 
     setTimeout(async () => {
       if (beatAudio) {
-        // Asegurarse de que el AudioContext esté activo
-        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-          await audioContextRef.current.resume();
-        }
-
         beatAudio.currentTime = 0;
-        const playPromise = beatAudio.play();
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              console.log('✅ Beat iniciado correctamente');
-              setIsBeatPlaying(true);
-            })
-            .catch((error: any) => {
-              console.error('❌ Error reproduciendo beat:', error);
-              // Intentar activar AudioContext una vez más
-              if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-                audioContextRef.current.resume().then(() => {
-                  console.log('✅ AudioContext reactivado, reintentando...');
-                  beatAudio.play().catch((e) => {
-                    console.error('❌ Error después de reactivar AudioContext:', e);
-                  });
-                });
-              }
-            });
-        }
+        await playBeat();
       }
     }, delay);
   };
 
   /**
-   * Pausa o reanuda el beat
+   * Pausa o reanuda el beat (solo host puede controlar)
    */
-  const toggleBeat = () => {
-    if (beatAudio) {
-      if (isBeatPlaying) {
-        beatAudio.pause();
-        setIsBeatPlaying(false);
-      } else {
-        const playPromise = beatAudio.play();
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              setIsBeatPlaying(true);
-            })
-            .catch((error: any) => {
-              console.error('❌ Error reproduciendo beat:', error);
-              // Intentar activar AudioContext si está suspendido
-              if (window.AudioContext || (window as any).webkitAudioContext) {
-                const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-                const audioContext = new AudioContextClass();
-                if (audioContext.state === 'suspended') {
-                  audioContext.resume().then(() => {
-                    beatAudio.play().catch((e) => {
-                      console.error('❌ Error después de activar AudioContext:', e);
-                    });
-                  });
-                }
-              }
-            });
+  const toggleBeat = async () => {
+    if (!isHost || !beatAudio) return;
+
+    if (isBeatPlaying) {
+      pauseBeat();
+      // Enviar evento de pausa al guest
+      if (signalingRef.current) {
+        signalingRef.current.send({
+          type: 'beat-pause',
+        });
+      }
+    } else {
+      const success = await playBeat();
+      if (success) {
+        // Enviar evento de reproducción al guest
+        if (signalingRef.current) {
+          signalingRef.current.send({
+            type: 'beat-play',
+          });
         }
       }
     }
   };
 
   /**
-   * Reinicia el beat desde el principio
+   * Reinicia el beat desde el principio (solo host puede controlar)
    */
-  const restartBeat = () => {
-    if (beatAudio) {
-      beatAudio.currentTime = 0;
-      if (!isBeatPlaying) {
-        const playPromise = beatAudio.play();
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              setIsBeatPlaying(true);
-            })
-            .catch((error: any) => {
-              console.error('❌ Error reproduciendo beat:', error);
-              // Intentar activar AudioContext si está suspendido
-              if (window.AudioContext || (window as any).webkitAudioContext) {
-                const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-                const audioContext = new AudioContextClass();
-                if (audioContext.state === 'suspended') {
-                  audioContext.resume().then(() => {
-                    beatAudio.play().catch((e) => {
-                      console.error('❌ Error después de activar AudioContext:', e);
-                    });
-                  });
-                }
-              }
-            });
-        }
-      }
+  const restartBeat = async () => {
+    if (!isHost || !beatAudio) return;
+
+    await restartBeatInternal();
+    // Enviar evento de reinicio al guest
+    if (signalingRef.current) {
+      signalingRef.current.send({
+        type: 'beat-restart',
+      });
     }
   };
 
@@ -589,7 +601,7 @@ function RoomPageContent() {
         )}
       </div>
 
-      {battleStarted && beatAudio && (
+      {battleStarted && beatAudio && isHost && (
         <div className={styles.beatControls}>
           <label className={styles.label}>Controles del Beat:</label>
           <div className={styles.beatButtons}>
@@ -606,6 +618,14 @@ function RoomPageContent() {
               🔄 Reiniciar
             </button>
           </div>
+        </div>
+      )}
+      
+      {battleStarted && beatAudio && !isHost && (
+        <div className={styles.beatControls}>
+          <p style={{ color: '#888', fontSize: '0.9rem', textAlign: 'center' }}>
+            {isBeatPlaying ? '▶️ Reproduciendo' : '⏸️ Pausado'} - Controlado por el host
+          </p>
         </div>
       )}
 
