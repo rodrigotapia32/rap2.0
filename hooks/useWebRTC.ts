@@ -32,6 +32,7 @@ export function useWebRTC({
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const sendMessageRef = useRef(sendSignalingMessage);
+  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]); // Cola de ICE candidates pendientes
 
   // Configuración STUN (público de Google)
   // Para localhost, también agregamos configuración sin STUN para conexiones locales
@@ -104,6 +105,7 @@ export function useWebRTC({
         onRemoteStream(event.streams[0]);
       }
     };
+
 
     // Manejar cambios de estado de conexión
     pc.onconnectionstatechange = () => {
@@ -265,13 +267,15 @@ export function useWebRTC({
     }
 
     try {
+      // Intentar agregar el ICE candidate
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (error: any) {
-      console.error('❌ Error agregando ICE candidate:', error);
-      // Si el error es porque la descripción remota no está establecida, es normal
-      // Los ICE candidates se agregarán automáticamente cuando se establezca la descripción remota
-      if (error.name === 'InvalidStateError' && pc.signalingState === 'stable') {
-        console.log('🔵 ICE candidate llegó antes de la descripción remota, se agregará después');
+      // Si el error es porque la descripción remota no está establecida, guardarlo en la cola
+      if (error.name === 'InvalidStateError' && pc.remoteDescription === null) {
+        console.log('🔵 ICE candidate llegó antes de la descripción remota, guardando en cola...');
+        pendingIceCandidatesRef.current.push(candidate);
+      } else {
+        console.error('❌ Error agregando ICE candidate:', error);
       }
     }
   }, [createPeerConnection]);
