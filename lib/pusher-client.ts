@@ -66,18 +66,19 @@ export class PusherSignalingClient {
 
       // Escuchar cuando la suscripción es exitosa
       this.channel.bind('pusher:subscription_succeeded', () => {
-        console.log('Suscrito al canal de Pusher');
+        console.log('✅ Suscrito al canal de Pusher');
         this.isConnected = true;
         if (this.onConnectionChange) {
           this.onConnectionChange(true);
         }
-        // Notificar que el usuario se unió
+        // Notificar que el usuario se unió (con delay para asegurar que el otro cliente esté listo)
         setTimeout(() => {
+          console.log('👤 Enviando user-joined:', this.userId, this.nickname);
           this.trigger('user-joined', {
             userId: this.userId,
             nickname: this.nickname,
           });
-        }, 100);
+        }, 500); // Aumentado a 500ms para dar más tiempo
       });
 
       // Eventos de conexión
@@ -113,12 +114,16 @@ export class PusherSignalingClient {
 
       // Escuchar cuando otros usuarios se unen (client events)
       this.channel.bind('client-user-joined', (data: { userId: string; nickname: string }) => {
+        console.log('👤 Recibido client-user-joined:', data);
         if (data.userId !== this.userId) {
+          console.log('👤 Procesando user-joined para:', data.nickname);
           this.onMessage({
             type: 'user-joined',
             userId: data.userId,
             nickname: data.nickname,
           });
+        } else {
+          console.log('👤 Ignorando user-joined propio');
         }
       });
 
