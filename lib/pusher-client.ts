@@ -101,14 +101,15 @@ export class PusherSignalingClient {
         }
       });
 
-      // Escuchar mensajes de signaling (client events)
-      this.channel.bind('client-signaling', (data: SignalingMessage) => {
-        // No procesar nuestros propios mensajes
-        if (data.userId && data.userId === this.userId) {
-          return;
-        }
-        this.onMessage(data);
-      });
+          // Escuchar mensajes de signaling (client events)
+          this.channel.bind('client-signaling', (data: SignalingMessage) => {
+            // No procesar nuestros propios mensajes
+            if (data.userId && data.userId === this.userId) {
+              return;
+            }
+            console.log('📨 Mensaje recibido:', data.type);
+            this.onMessage(data);
+          });
 
       // Escuchar cuando otros usuarios se unen (client events)
       this.channel.bind('client-user-joined', (data: { userId: string; nickname: string }) => {
@@ -147,18 +148,19 @@ export class PusherSignalingClient {
       return;
     }
 
-    try {
-      // Agregar userId al mensaje para identificar el remitente
-      const messageWithUser = {
-        ...message,
-        userId: this.userId,
-      };
+      try {
+        // Agregar userId al mensaje para identificar el remitente
+        const messageWithUser = {
+          ...message,
+          userId: this.userId,
+        };
 
-      // Enviar a través del canal usando client events
-      this.trigger('signaling', messageWithUser);
-    } catch (error) {
-      console.error('Error enviando mensaje a Pusher:', error);
-    }
+        console.log('📤 Enviando mensaje:', message.type);
+        // Enviar a través del canal usando client events
+        this.trigger('signaling', messageWithUser);
+      } catch (error) {
+        console.error('❌ Error enviando mensaje a Pusher:', error);
+      }
   }
 
   /**

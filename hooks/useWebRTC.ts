@@ -95,25 +95,47 @@ export function useWebRTC({
     // Manejar cambios de estado de conexión
     pc.onconnectionstatechange = () => {
       const state = pc.connectionState;
-      console.log('WebRTC connection state:', state);
+      console.log('🔵 WebRTC connection state:', state);
       if (onConnectionStateChange) {
         onConnectionStateChange(state);
       }
       setIsConnected(state === 'connected');
       
       // Log estados importantes
-      if (state === 'failed' || state === 'disconnected') {
-        console.error('WebRTC connection failed or disconnected:', state);
+      if (state === 'connected') {
+        console.log('✅ WebRTC conectado exitosamente!');
+      } else if (state === 'failed') {
+        console.error('❌ WebRTC connection failed');
+      } else if (state === 'disconnected') {
+        console.warn('⚠️ Conexión WebRTC desconectada');
       }
+    };
+
+    // Manejar cambios de ICE connection state
+    pc.oniceconnectionstatechange = () => {
+      console.log('🧊 ICE connection state:', pc.iceConnectionState);
+      if (pc.iceConnectionState === 'failed') {
+        console.error('❌ ICE connection failed - intentando restart...');
+        // Intentar restart ICE
+        pc.restartIce();
+      }
+    };
+
+    // Manejar cambios de ICE gathering state
+    pc.onicegatheringstatechange = () => {
+      console.log('🔍 ICE gathering state:', pc.iceGatheringState);
     };
 
     // Manejar ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate && sendMessageRef.current) {
+        console.log('🧊 Enviando ICE candidate:', event.candidate.type);
         sendMessageRef.current({
           type: 'ice-candidate',
           candidate: event.candidate,
         });
+      } else if (!event.candidate) {
+        console.log('🧊 ICE gathering completado');
       }
     };
 
@@ -132,20 +154,29 @@ export function useWebRTC({
    */
   const createOffer = useCallback(async () => {
     const pc = peerConnectionRef.current;
-    if (!pc) return;
+    if (!pc) {
+      console.warn('⚠️ No hay peer connection para crear oferta');
+      return;
+    }
 
     try {
-      const offer = await pc.createOffer();
+      console.log('📤 Host: Creando oferta WebRTC...');
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false,
+      });
       await pc.setLocalDescription(offer);
+      console.log('📤 Host: Oferta creada y local description establecida');
 
       if (sendMessageRef.current) {
         sendMessageRef.current({
           type: 'offer',
           offer: offer,
         });
+        console.log('📤 Host: Oferta enviada a través de signaling');
       }
     } catch (error) {
-      console.error('Error creando offer:', error);
+      console.error('❌ Error creando offer:', error);
     }
   }, []);
 
@@ -203,15 +234,15 @@ export function useWebRTC({
   const handleIceCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
     const pc = peerConnectionRef.current;
     if (!pc) {
-      console.warn('No hay peer connection para agregar ICE candidate');
+      console.warn('⚠️ No hay peer connection para agregar ICE candidate');
       return;
     }
 
     try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      console.log('ICE candidate agregado correctamente');
+      console.log('🧊 ICE candidate agregado correctamente');
     } catch (error) {
-      console.error('Error agregando ICE candidate:', error);
+      console.error('❌ Error agregando ICE candidate:', error);
     }
   }, []);
 
