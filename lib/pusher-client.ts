@@ -109,26 +109,35 @@ export class PusherSignalingClient {
         if (this.onConnectionChange) {
           this.onConnectionChange(true);
         }
+        
+        // Función para enviar user-joined
+        const sendUserJoined = () => {
+          console.log('👤 Enviando user-joined:', this.userId, this.nickname);
+          const success = this.trigger('user-joined', {
+            userId: this.userId,
+            nickname: this.nickname,
+          });
+          if (!success) {
+            console.warn('⚠️ No se pudo enviar user-joined (canal no listo)');
+          }
+        };
+        
         // Notificar que el usuario se unió inmediatamente
-        console.log('👤 Enviando user-joined:', this.userId, this.nickname);
-        this.trigger('user-joined', {
-          userId: this.userId,
-          nickname: this.nickname,
-        });
+        sendUserJoined();
         
         // Reenviar periódicamente para asegurar que el otro usuario lo reciba
         // (útil si hay problemas de timing)
         let retryCount = 0;
         const maxRetries = 5;
         const retryInterval = setInterval(() => {
-          if (retryCount < maxRetries) {
+          if (retryCount < maxRetries && this.isConnected) {
             console.log(`👤 Reenviando user-joined (intento ${retryCount + 1}/${maxRetries})`);
-            this.trigger('user-joined', {
-              userId: this.userId,
-              nickname: this.nickname,
-            });
+            sendUserJoined();
             retryCount++;
           } else {
+            if (retryCount >= maxRetries) {
+              console.log('👤 Finalizado reintentos de user-joined');
+            }
             clearInterval(retryInterval);
           }
         }, 1000); // Cada segundo, hasta 5 veces
@@ -191,13 +200,25 @@ export class PusherSignalingClient {
    * Nota: Client events están limitados a 10 eventos/minuto en plan gratis de Pusher
    * Para producción, considera usar un servidor backend
    */
-  private trigger(event: string, data: any) {
-    if (this.channel && this.isConnected && this.channel.trigger) {
-      try {
-        this.channel.trigger(`client-${event}`, data);
-      } catch (error) {
-        console.error('Error trigger event:', error);
-      }
+  private trigger(event: string, data: any): boolean {
+    if (!this.channel) {
+      console.warn('⚠️ No hay canal para trigger');
+      return false;
+    }
+    if (!this.isConnected) {
+      console.warn('⚠️ Canal no conectado para trigger');
+      return false;
+    }
+    if (!this.channel.trigger) {
+      console.warn('⚠️ Canal no tiene método trigger (client events no habilitados?)');
+      return false;
+    }
+    try {
+      this.channel.trigger(`client-${event}`, data);
+      return true;
+    } catch (error) {
+      console.error('❌ Error trigger event:', error);
+      return false;
     }
   }
 
