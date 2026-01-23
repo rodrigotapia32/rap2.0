@@ -257,15 +257,17 @@ function RoomPageContent() {
    * El contador se ejecuta en ambos usuarios simultáneamente
    */
   useEffect(() => {
-    // Resetear el flag si la batalla no ha empezado y ambos están listos
-    if (!isReady || !remoteReady || battleStarted) {
-      countdownStartedRef.current = false;
-    }
-
-    // Limpiar interval anterior si existe
-    if (countdownIntervalRef.current) {
-      clearInterval(countdownIntervalRef.current);
-      countdownIntervalRef.current = null;
+    // Limpiar cuando la batalla empieza o cuando los estados cambian
+    if (battleStarted || !isReady || !remoteReady) {
+      if (countdownIntervalRef.current) {
+        console.log('🔵 Limpiando interval del countdown (condición cambiada)');
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+      if (battleStarted) {
+        countdownStartedRef.current = false;
+      }
+      return;
     }
 
     // Solo iniciar countdown si ambos están listos, la batalla no ha empezado, y el countdown no se ha iniciado
@@ -306,8 +308,9 @@ function RoomPageContent() {
     }
 
     return () => {
+      // Solo limpiar en unmount
       if (countdownIntervalRef.current) {
-        console.log('🔵 Limpiando interval del countdown');
+        console.log('🔵 Limpiando interval del countdown (unmount)');
         clearInterval(countdownIntervalRef.current);
         countdownIntervalRef.current = null;
       }
