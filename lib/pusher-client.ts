@@ -87,7 +87,9 @@ export class PusherSignalingClient {
 
       // Escuchar cuando otros usuarios se unen (client events)
       this.channel.bind('client-user-joined', (data: { userId: string; nickname: string }) => {
+        console.log('🔵 Recibido client-user-joined:', data);
         if (data.userId !== this.userId) {
+          console.log('🔵 Procesando user-joined de otro usuario');
           this.onMessage({
             type: 'user-joined',
             userId: data.userId,
@@ -115,15 +117,18 @@ export class PusherSignalingClient {
         }
         
         // Notificar que el usuario se unió inmediatamente
-        this.trigger('user-joined', {
+        console.log('🔵 Enviando user-joined...');
+        const triggered = this.trigger('user-joined', {
           userId: this.userId,
           nickname: this.nickname,
         });
+        if (!triggered) {
+          console.warn('⚠️ No se pudo enviar user-joined (client events no habilitados?)');
+        }
         
-        // Reenviar silenciosamente para asegurar que el otro usuario lo reciba
-        // (sin logs excesivos)
+        // Reenviar para asegurar que el otro usuario lo reciba
         let retryCount = 0;
-        const maxRetries = 3; // Reducido a 3
+        const maxRetries = 3;
         const retryInterval = setInterval(() => {
           if (retryCount < maxRetries && this.isConnected) {
             this.trigger('user-joined', {
@@ -134,7 +139,7 @@ export class PusherSignalingClient {
           } else {
             clearInterval(retryInterval);
           }
-        }, 1500); // Cada 1.5 segundos
+        }, 1500);
       });
 
       // Eventos de conexión
