@@ -45,22 +45,101 @@ function RoomPageContent() {
   const webrtcStartedRef = useRef(false); // Prevenir múltiples inicios de WebRTC
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null); // Ref para el interval del countdown
   const countdownStartedRef = useRef(false); // Ref para rastrear si el countdown ya se inició
+  const audioContextRef = useRef<AudioContext | null>(null); // Ref para el AudioContext compartido
+  const audioUnlockedRef = useRef(false); // Ref para rastrear si el audio está desbloqueado
+
+  /**
+   * Activa el AudioContext y desbloquea el audio en móvil
+   */
+  const unlockAudio = async (): Promise<boolean> => {
+    try {
+      // Obtener AudioContext compartido o crear uno nuevo si no existe
+      let audioContext = audioContextRef.current;
+      if (!audioContext) {
+        const sharedContext = getAudioContext();
+        if (sharedContext) {
+          audioContext = sharedContext;
+          audioContextRef.current = sharedContext;
+        } else {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (!AudioContextClass) {
+            console.warn('⚠️ AudioContext no disponible');
+            return false;
+          }
+          audioContext = new AudioContextClass();
+          audioContextRef.current = audioContext;
+        }
+      }
+
+      if (!audioContext) {
+        console.warn('⚠️ No se pudo obtener AudioContext');
+        return false;
+      }
+
+      // Activar AudioContext si está suspendido
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+        console.log('✅ AudioContext activado');
+      }
+
+      // Reproducir un audio silencioso muy corto para desbloquear autoplay en móvil
+      if (!audioUnlockedRef.current && beatAudio) {
+        try {
+          // Crear un buffer de audio silencioso
+          const buffer = audioContext.createBuffer(1, 1, 22050);
+          const source = audioContext.createBufferSource();
+          source.buffer = buffer;
+          source.connect(audioContext.destination);
+          source.start(0);
+          source.stop(0.001);
+          
+          // También intentar reproducir el beat muy brevemente
+          const originalVolume = beatAudio.volume;
+          beatAudio.volume = 0.01; // Muy bajo pero no 0
+          await beatAudio.play();
+          beatAudio.pause();
+          beatAudio.currentTime = 0;
+          beatAudio.volume = originalVolume;
+          
+          audioUnlockedRef.current = true;
+          console.log('✅ Audio desbloqueado para móvil');
+          return true;
+        } catch (e) {
+          console.warn('⚠️ No se pudo desbloquear audio completamente:', e);
+          // Continuar de todas formas
+          return audioContext.state === 'running';
+        }
+      }
+
+      return audioContext.state === 'running';
+    } catch (error) {
+      console.error('❌ Error desbloqueando audio:', error);
+      return false;
+    }
+  };
 
   /**
    * Inicia la batalla cuando ambos están listos
    */
-  const startBattle = (serverTimestamp: number) => {
+  const startBattle = async (serverTimestamp: number) => {
     setBattleStarted(true);
     setCountdown(null);
+
+    // Asegurarse de que el audio esté desbloqueado antes de iniciar
+    await unlockAudio();
 
     // Calcular delay basado en el timestamp del servidor
     const now = Date.now();
     const delay = Math.max(0, serverTimestamp - now);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       if (beatAudio) {
+        // Asegurarse de que el AudioContext esté activo
+        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+          await audioContextRef.current.resume();
+        }
+
         beatAudio.currentTime = 0;
-        // En móvil, puede que necesite activar el AudioContext primero
         const playPromise = beatAudio.play();
         if (playPromise !== undefined) {
           playPromise
@@ -70,22 +149,14 @@ function RoomPageContent() {
             })
             .catch((error: any) => {
               console.error('❌ Error reproduciendo beat:', error);
-              // En móvil, puede que necesite interacción del usuario
-              if (error.name === 'NotAllowedError' || error.name === 'NotSupportedError') {
-                console.warn('⚠️ Autoplay bloqueado en móvil. El usuario debe interactuar primero.');
-                // Intentar activar AudioContext si está disponible
-                if (window.AudioContext || (window as any).webkitAudioContext) {
-                  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-                  const audioContext = new AudioContextClass();
-                  if (audioContext.state === 'suspended') {
-                    audioContext.resume().then(() => {
-                      console.log('✅ AudioContext activado, reintentando...');
-                      beatAudio.play().catch((e) => {
-                        console.error('❌ Error después de activar AudioContext:', e);
-                      });
-                    });
-                  }
-                }
+              // Intentar activar AudioContext una vez más
+              if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+                audioContextRef.current.resume().then(() => {
+                  console.log('✅ AudioContext reactivado, reintentando...');
+                  beatAudio.play().catch((e) => {
+                    console.error('❌ Error después de reactivar AudioContext:', e);
+                  });
+                });
               }
             });
         }
@@ -164,8 +235,12 @@ function RoomPageContent() {
   /**
    * Maneja el click en "Estoy listo"
    */
-  const handleReady = () => {
+  const handleReady = async () => {
     setIsReady(true);
+    
+    // Desbloquear audio en móvil cuando el usuario interactúa
+    await unlockAudio();
+    
     if (signalingRef.current) {
       signalingRef.current.send({
         type: 'ready',
@@ -362,11 +437,20 @@ function RoomPageContent() {
     setMicVolume,
     remoteVolume,
     setRemoteVolume,
+    getAudioContext,
   } = useAudioControls({
     localStream,
     remoteStream,
     beatAudio,
   });
+
+  // Sincronizar AudioContext compartido
+  useEffect(() => {
+    const sharedContext = getAudioContext();
+    if (sharedContext) {
+      audioContextRef.current = sharedContext;
+    }
+  }, [getAudioContext]);
 
   /**
    * Inicia cuenta regresiva cuando ambos están listos

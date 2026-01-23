@@ -143,6 +143,13 @@ export function useAudioControls({
     };
   }, [localStream]);
 
+  /**
+   * Obtiene la referencia al AudioContext para uso compartido
+   */
+  const getAudioContext = () => {
+    return audioContextRef.current;
+  };
+
   return {
     beatVolume,
     setBeatVolume,
@@ -150,5 +157,6 @@ export function useAudioControls({
     setMicVolume,
     remoteVolume,
     setRemoteVolume,
+    getAudioContext,
   };
 }
