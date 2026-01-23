@@ -41,6 +41,7 @@ function RoomPageContent() {
   const signalingRef = useRef<PusherSignalingClient | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const webrtcHandleMessageRef = useRef<((message: SignalingMessage) => void) | null>(null);
+  const webrtcStartedRef = useRef(false); // Prevenir múltiples inicios de WebRTC
 
   /**
    * Inicia la batalla cuando ambos están listos
@@ -106,8 +107,9 @@ function RoomPageContent() {
           case 'user-joined':
             if (message.userId !== userIdRef.current) {
               setRemoteNickname(message.nickname);
-              // Si es host, enviar el beat seleccionado y iniciar WebRTC
-              if (isHost && signalingRef.current) {
+              // Si es host, enviar el beat seleccionado y iniciar WebRTC (solo una vez)
+              if (isHost && signalingRef.current && !webrtcStartedRef.current) {
+                webrtcStartedRef.current = true; // Marcar como iniciado
                 setTimeout(() => {
                   if (signalingRef.current) {
                     signalingRef.current.send({
@@ -123,6 +125,7 @@ function RoomPageContent() {
                     startWebRTC();
                   } else {
                     console.warn('⚠️ startWebRTC no está disponible');
+                    webrtcStartedRef.current = false; // Resetear si falla
                   }
                 }, 1000);
               }

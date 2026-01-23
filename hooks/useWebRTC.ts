@@ -147,17 +147,22 @@ export function useWebRTC({
     }
 
     try {
+      console.log('🔵 Creando oferta WebRTC...');
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: false,
       });
       await pc.setLocalDescription(offer);
+      console.log('🔵 Oferta creada, enviando...');
 
       if (sendMessageRef.current) {
         sendMessageRef.current({
           type: 'offer',
           offer: offer,
         });
+        console.log('🔵 Oferta enviada a través de signaling');
+      } else {
+        console.error('❌ sendMessageRef.current no está disponible');
       }
     } catch (error) {
       console.error('❌ Error creando offer:', error);
