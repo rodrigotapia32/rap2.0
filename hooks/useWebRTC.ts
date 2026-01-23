@@ -11,10 +11,10 @@ interface UseWebRTCOptions {
   userId: string;
   nickname: string;
   isHost: boolean;
-  onSignalingMessage?: (message: SignalingMessage) => void;
   sendSignalingMessage?: (message: SignalingMessage) => void;
   onRemoteStream?: (stream: MediaStream) => void;
   onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
+  waitForRemote?: boolean; // Si es true, espera a que el remoto esté listo antes de crear oferta
 }
 
 export function useWebRTC({
@@ -22,10 +22,10 @@ export function useWebRTC({
   userId,
   nickname,
   isHost,
-  onSignalingMessage,
   sendSignalingMessage,
   onRemoteStream,
   onConnectionStateChange,
+  waitForRemote = false,
 }: UseWebRTCOptions) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -243,15 +243,20 @@ export function useWebRTC({
       // 2. Crear conexión peer
       createPeerConnection();
 
-      // 3. Si es host, crear offer después de un breve delay
-      // Esperar a que Pusher esté listo antes de crear la oferta
+      // 3. Si es host, crear offer cuando el remoto esté listo
       if (isHost && sendMessageRef.current) {
-        // Esperar a que ambos usuarios estén conectados
-        setTimeout(() => {
-          if (mounted && peerConnectionRef.current) {
-            createOffer();
-          }
-        }, 3000); // Aumentado a 3 segundos para dar tiempo a que ambos se conecten
+        if (waitForRemote) {
+          // Esperar a que el remoto esté conectado (se llama desde fuera cuando remoteNickname está listo)
+          // La oferta se creará desde el componente padre cuando detecte al remoto
+        } else {
+          // Fallback: esperar un delay si waitForRemote no está habilitado
+          setTimeout(() => {
+            if (mounted && peerConnectionRef.current) {
+              console.log('🔵 Iniciando WebRTC...');
+              createOffer();
+            }
+          }, 2000);
+        }
       }
     };
 
@@ -288,9 +293,18 @@ export function useWebRTC({
     }
   }, [isHost, handleOffer, handleAnswer, handleIceCandidate]);
 
+  // Exponer función para crear oferta manualmente (cuando el remoto esté listo)
+  const startWebRTC = useCallback(() => {
+    if (isHost && peerConnectionRef.current && sendMessageRef.current) {
+      console.log('🔵 Iniciando WebRTC (remoto detectado)...');
+      createOffer();
+    }
+  }, [isHost, createOffer]);
+
   return {
     localStream,
     isConnected,
     handleSignalingMessage,
+    startWebRTC,
   };
 }

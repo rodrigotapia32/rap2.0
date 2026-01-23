@@ -106,7 +106,7 @@ function RoomPageContent() {
           case 'user-joined':
             if (message.userId !== userIdRef.current) {
               setRemoteNickname(message.nickname);
-              // Si es host, enviar el beat seleccionado al nuevo invitado
+              // Si es host, enviar el beat seleccionado y iniciar WebRTC
               if (isHost && signalingRef.current) {
                 setTimeout(() => {
                   if (signalingRef.current) {
@@ -116,6 +116,12 @@ function RoomPageContent() {
                     });
                   }
                 }, 500);
+                // Iniciar WebRTC cuando el remoto esté detectado
+                setTimeout(() => {
+                  if (startWebRTC) {
+                    startWebRTC();
+                  }
+                }, 1000);
               }
             }
             break;
@@ -141,7 +147,7 @@ function RoomPageContent() {
   }, [roomId, nickname, isHost, selectedBeat]);
 
   // Inicializar WebRTC
-  const { localStream: webrtcLocalStream, isConnected, handleSignalingMessage } = useWebRTC({
+  const { localStream: webrtcLocalStream, isConnected, handleSignalingMessage, startWebRTC } = useWebRTC({
     roomId,
     userId: userIdRef.current,
     nickname,
@@ -157,9 +163,10 @@ function RoomPageContent() {
         remoteAudioRef.current.srcObject = stream;
       }
     },
-      onConnectionStateChange: (state) => {
-        // El estado se maneja en useWebRTC con logs apropiados
-      },
+    onConnectionStateChange: (state) => {
+      // El estado se maneja en useWebRTC con logs apropiados
+    },
+    waitForRemote: true, // Esperar a que el remoto esté conectado
   });
 
   // Guardar referencia al handler de mensajes WebRTC
