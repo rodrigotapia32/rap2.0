@@ -300,10 +300,28 @@ export function useWebRTC({
 
   // Exponer función para crear oferta manualmente (cuando el remoto esté listo)
   const startWebRTC = useCallback(() => {
-    if (isHost && peerConnectionRef.current && sendMessageRef.current) {
-      console.log('🔵 Iniciando WebRTC (remoto detectado)...');
-      createOffer();
+    console.log('🔵 startWebRTC llamado, verificando condiciones...');
+    console.log('  - isHost:', isHost);
+    console.log('  - peerConnectionRef.current:', !!peerConnectionRef.current);
+    console.log('  - sendMessageRef.current:', !!sendMessageRef.current);
+    
+    if (!isHost) {
+      console.warn('⚠️ startWebRTC llamado pero no es host');
+      return;
     }
+    
+    if (!peerConnectionRef.current) {
+      console.error('❌ No hay peer connection disponible');
+      return;
+    }
+    
+    if (!sendMessageRef.current) {
+      console.error('❌ No hay función de envío disponible');
+      return;
+    }
+    
+    console.log('🔵 Todas las condiciones cumplidas, creando oferta...');
+    createOffer();
   }, [isHost, createOffer]);
 
   return {
