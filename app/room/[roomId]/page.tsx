@@ -42,6 +42,7 @@ function RoomPageContent() {
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const webrtcHandleMessageRef = useRef<((message: SignalingMessage) => void) | null>(null);
   const webrtcStartedRef = useRef(false); // Prevenir múltiples inicios de WebRTC
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null); // Ref para el interval del countdown
 
   /**
    * Inicia la batalla cuando ambos están listos
@@ -255,22 +256,36 @@ function RoomPageContent() {
    * El contador se ejecuta en ambos usuarios simultáneamente
    */
   useEffect(() => {
+    // Limpiar interval anterior si existe
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+
+    // Solo iniciar countdown si ambos están listos, la batalla no ha empezado, y el countdown no está activo
     if (isReady && remoteReady && !battleStarted && countdown === null) {
+      console.log('🔵 Iniciando countdown...');
       let count = 3;
       setCountdown(count);
 
-      const interval = setInterval(() => {
+      countdownIntervalRef.current = setInterval(() => {
         count--;
+        console.log(`🔵 Countdown: ${count}`);
         if (count > 0) {
           setCountdown(count);
         } else {
           setCountdown(0);
-          clearInterval(interval);
+          if (countdownIntervalRef.current) {
+            clearInterval(countdownIntervalRef.current);
+            countdownIntervalRef.current = null;
+          }
+          console.log('🔵 Countdown terminado, iniciando batalla...');
 
           // El host envía el timestamp de inicio para sincronizar el beat
           if (isHost && signalingRef.current) {
             // Dar 1 segundo adicional después del "GO" para que el beat comience
             const startTime = Date.now() + 1000;
+            console.log('🔵 Host: Enviando start-battle con timestamp:', startTime);
             signalingRef.current.send({
               type: 'start-battle',
               timestamp: startTime,
@@ -280,10 +295,16 @@ function RoomPageContent() {
           }
         }
       }, 1000);
-
-      return () => clearInterval(interval);
     }
-  }, [isReady, remoteReady, battleStarted, countdown, isHost]);
+
+    return () => {
+      if (countdownIntervalRef.current) {
+        console.log('🔵 Limpiando interval del countdown');
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+    };
+  }, [isReady, remoteReady, battleStarted, countdown, isHost, startBattle]);
 
   if (!nickname) {
     return <div className={styles.container}>Cargando...</div>;
