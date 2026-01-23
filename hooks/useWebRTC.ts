@@ -56,8 +56,6 @@ export function useWebRTC({
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          // Permitir que múltiples pestañas accedan al micrófono
-          suppressLocalAudioPlayback: false,
         },
         video: false,
       });
