@@ -60,10 +60,35 @@ function RoomPageContent() {
     setTimeout(() => {
       if (beatAudio) {
         beatAudio.currentTime = 0;
-        beatAudio.play().catch((error) => {
-          console.error('Error reproduciendo beat:', error);
-        });
-        setIsBeatPlaying(true);
+        // En móvil, puede que necesite activar el AudioContext primero
+        const playPromise = beatAudio.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('✅ Beat iniciado correctamente');
+              setIsBeatPlaying(true);
+            })
+            .catch((error: any) => {
+              console.error('❌ Error reproduciendo beat:', error);
+              // En móvil, puede que necesite interacción del usuario
+              if (error.name === 'NotAllowedError' || error.name === 'NotSupportedError') {
+                console.warn('⚠️ Autoplay bloqueado en móvil. El usuario debe interactuar primero.');
+                // Intentar activar AudioContext si está disponible
+                if (window.AudioContext || (window as any).webkitAudioContext) {
+                  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                  const audioContext = new AudioContextClass();
+                  if (audioContext.state === 'suspended') {
+                    audioContext.resume().then(() => {
+                      console.log('✅ AudioContext activado, reintentando...');
+                      beatAudio.play().catch((e) => {
+                        console.error('❌ Error después de activar AudioContext:', e);
+                      });
+                    });
+                  }
+                }
+              }
+            });
+        }
       }
     }, delay);
   };
@@ -77,10 +102,28 @@ function RoomPageContent() {
         beatAudio.pause();
         setIsBeatPlaying(false);
       } else {
-        beatAudio.play().catch((error) => {
-          console.error('Error reproduciendo beat:', error);
-        });
-        setIsBeatPlaying(true);
+        const playPromise = beatAudio.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              setIsBeatPlaying(true);
+            })
+            .catch((error: any) => {
+              console.error('❌ Error reproduciendo beat:', error);
+              // Intentar activar AudioContext si está suspendido
+              if (window.AudioContext || (window as any).webkitAudioContext) {
+                const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                const audioContext = new AudioContextClass();
+                if (audioContext.state === 'suspended') {
+                  audioContext.resume().then(() => {
+                    beatAudio.play().catch((e) => {
+                      console.error('❌ Error después de activar AudioContext:', e);
+                    });
+                  });
+                }
+              }
+            });
+        }
       }
     }
   };
@@ -92,10 +135,28 @@ function RoomPageContent() {
     if (beatAudio) {
       beatAudio.currentTime = 0;
       if (!isBeatPlaying) {
-        beatAudio.play().catch((error) => {
-          console.error('Error reproduciendo beat:', error);
-        });
-        setIsBeatPlaying(true);
+        const playPromise = beatAudio.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              setIsBeatPlaying(true);
+            })
+            .catch((error: any) => {
+              console.error('❌ Error reproduciendo beat:', error);
+              // Intentar activar AudioContext si está suspendido
+              if (window.AudioContext || (window as any).webkitAudioContext) {
+                const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                const audioContext = new AudioContextClass();
+                if (audioContext.state === 'suspended') {
+                  audioContext.resume().then(() => {
+                    beatAudio.play().catch((e) => {
+                      console.error('❌ Error después de activar AudioContext:', e);
+                    });
+                  });
+                }
+              }
+            });
+        }
       }
     }
   };
@@ -265,19 +326,28 @@ function RoomPageContent() {
     const audio = new Audio(`/beats/beat${selectedBeat}.mp3`);
     audio.loop = true;
     audio.volume = 0.5;
+    // Atributos importantes para móvil
+    audio.setAttribute('playsinline', 'true');
+    audio.setAttribute('preload', 'auto');
+    audio.crossOrigin = 'anonymous';
     setBeatAudio(audio);
     setIsBeatPlaying(false);
 
     // Escuchar eventos de pausa/reproducción para mantener el estado sincronizado
     const handlePlay = () => setIsBeatPlaying(true);
     const handlePause = () => setIsBeatPlaying(false);
+    const handleError = (e: any) => {
+      console.error('❌ Error en beat audio:', e);
+    };
 
     audio.addEventListener('play', handlePlay);
     audio.addEventListener('pause', handlePause);
+    audio.addEventListener('error', handleError);
 
     return () => {
       audio.removeEventListener('play', handlePlay);
       audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('error', handleError);
       audio.pause();
       audio.src = '';
     };

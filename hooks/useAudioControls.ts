@@ -33,6 +33,10 @@ export function useAudioControls({
   useEffect(() => {
     if (!audioContextRef.current) {
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      // En móvil, el AudioContext puede estar suspendido y necesita activación
+      if (audioContextRef.current.state === 'suspended') {
+        console.log('🔵 AudioContext suspendido, se activará con interacción del usuario');
+      }
     }
 
     const audioContext = audioContextRef.current;
