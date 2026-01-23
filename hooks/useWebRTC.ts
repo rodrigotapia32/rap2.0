@@ -51,7 +51,23 @@ export function useWebRTC({
    */
   const initializeLocalStream = useCallback(async () => {
     try {
-      // Para el mismo PC, puede que necesitemos permisos específicos
+      // Verificar permisos primero (si está disponible)
+      let permissionStatus = null;
+      if (navigator.permissions && navigator.permissions.query) {
+        try {
+          permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+          if (permissionStatus.state === 'granted') {
+            console.log('✅ Permisos de micrófono ya otorgados');
+          } else if (permissionStatus.state === 'denied') {
+            console.warn('⚠️ Permisos de micrófono denegados previamente');
+          }
+        } catch (e) {
+          // La API de permisos no está disponible en todos los navegadores
+          console.log('API de permisos no disponible, intentando acceso directo');
+        }
+      }
+
+      // Intentar obtener el stream
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -60,16 +76,35 @@ export function useWebRTC({
         },
         video: false,
       });
+      
       localStreamRef.current = stream;
       setLocalStream(stream);
-      console.log('Stream local obtenido correctamente');
+      console.log('✅ Stream local obtenido correctamente');
       return stream;
     } catch (error: any) {
-      console.error('Error accediendo al micrófono:', error);
+      console.error('❌ Error accediendo al micrófono:', error);
+      
+      // Solo mostrar alert si realmente es un error de permisos
       if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        // Verificar si realmente está denegado (no solo que el usuario canceló el prompt)
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        // Solo mostrar alert si el error es persistente (no solo un cancel del prompt)
+        // En móvil, a veces el prompt se cancela pero los permisos ya están otorgados
         if (isMobile) {
-          alert('Permisos de micrófono denegados.\n\nEn móvil:\n1. Toca el ícono de candado en la barra de direcciones\n2. Permite el acceso al micrófono\n3. Recarga la página\n\nO ve a Configuración del navegador → Permisos → Micrófono');
+          // En móvil, verificar si realmente está denegado antes de mostrar el mensaje
+          try {
+            const status = await navigator.permissions?.query({ name: 'microphone' as PermissionName });
+            if (status?.state === 'denied') {
+              alert('Permisos de micrófono denegados.\n\nEn móvil:\n1. Toca el ícono de candado en la barra de direcciones\n2. Permite el acceso al micrófono\n3. Recarga la página\n\nO ve a Configuración del navegador → Permisos → Micrófono');
+            } else {
+              // Probablemente solo canceló el prompt, no mostrar alert
+              console.log('Usuario canceló el prompt, pero permisos pueden estar otorgados');
+            }
+          } catch (e) {
+            // Si no se puede verificar, mostrar el mensaje solo una vez
+            console.warn('⚠️ No se pudo verificar estado de permisos');
+          }
         } else {
           alert('Permisos de micrófono denegados.\n\nPor favor:\n1. Haz click en el ícono de candado en la barra de direcciones\n2. Permite el acceso al micrófono\n3. Recarga la página');
         }
@@ -83,7 +118,10 @@ export function useWebRTC({
         alert('El micrófono está siendo usado por otra aplicación. Cierra otras aplicaciones que puedan estar usando el micrófono.');
         return null;
       } else {
-        alert('No se pudo acceder al micrófono. Error: ' + error.message);
+        // Solo mostrar alert para errores desconocidos si no es un error común
+        if (!error.message?.includes('user') && !error.message?.includes('cancel')) {
+          console.warn('Error desconocido accediendo al micrófono:', error.message);
+        }
         return null;
       }
     }
