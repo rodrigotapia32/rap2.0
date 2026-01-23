@@ -1,0 +1,235 @@
+.container {
+  min-height: 100vh;
+  padding: 2rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: 2rem;
+}
+
+.title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.players {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.player {
+  padding: 1rem;
+  background: #1a1a1a;
+  border-radius: 8px;
+  border: 2px solid #333;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.playerLabel {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.playerName {
+  font-weight: 600;
+  flex: 1;
+}
+
+.readyBadge {
+  background: #10b981;
+  color: #fff;
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.waiting {
+  color: #888;
+  font-style: italic;
+}
+
+.status {
+  margin-bottom: 2rem;
+  text-align: center;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.statusText {
+  color: #888;
+  font-size: 1.1rem;
+}
+
+.countdown {
+  font-size: 6rem;
+  font-weight: 700;
+  color: #667eea;
+  animation: pulse 0.5s ease-in-out;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+}
+
+.battleActive {
+  padding: 1rem;
+}
+
+.battleText {
+  font-size: 2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.readyButton {
+  width: 100%;
+  padding: 1.5rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  margin-bottom: 2rem;
+}
+
+.readyButton:hover {
+  opacity: 0.9;
+}
+
+.readyButton:active {
+  opacity: 0.8;
+}
+
+.beatSelector {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: #1a1a1a;
+  border-radius: 8px;
+  border: 2px solid #333;
+}
+
+.label {
+  display: block;
+  margin-bottom: 1rem;
+  color: #fff;
+  font-weight: 600;
+}
+
+.beatButtons {
+  display: flex;
+  gap: 1rem;
+}
+
+.beatButton {
+  flex: 1;
+  padding: 1rem;
+  background: #2a2a2a;
+  border: 2px solid #444;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.beatButton:hover {
+  background: #333;
+  border-color: #667eea;
+}
+
+.beatButtonActive {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+}
+
+.beatInfo {
+  padding: 1rem;
+  background: #2a2a2a;
+  border: 2px solid #444;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.beatDisplay {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #667eea;
+  display: block;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: #1a1a1a;
+  border-radius: 8px;
+  border: 2px solid #333;
+}
+
+.controlGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.controlLabel {
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.slider {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: #333;
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+}
+
+.slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+  border: none;
+}
