@@ -122,34 +122,41 @@ function RoomPageContent() {
    * Reproduce el beat (usado internamente y por eventos remotos)
    */
   const playBeat = async (): Promise<boolean> => {
-    if (!beatAudio) return false;
+    console.log('🎵 [playBeat] Iniciando reproducción, beatAudio:', !!beatAudio, 'isHost:', isHost);
+    if (!beatAudio) {
+      console.error('❌ [playBeat] No hay beatAudio disponible');
+      return false;
+    }
 
     try {
       // Asegurarse de que el AudioContext esté activo
       if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+        console.log('🔵 [playBeat] AudioContext suspendido, resumiendo...');
         await audioContextRef.current.resume();
       }
 
+      console.log('🔵 [playBeat] Intentando reproducir, currentTime:', beatAudio.currentTime);
       const playPromise = beatAudio.play();
       if (playPromise !== undefined) {
         await playPromise;
-        console.log('✅ Beat reproducido correctamente');
+        console.log('✅ [playBeat] Beat reproducido correctamente, estado:', beatAudio.paused ? 'pausado' : 'reproduciendo');
         setIsBeatPlaying(true);
         return true;
       }
+      console.warn('⚠️ [playBeat] playPromise es undefined');
       return false;
     } catch (error: any) {
-      console.error('❌ Error reproduciendo beat:', error);
+      console.error('❌ [playBeat] Error reproduciendo beat:', error.name, error.message);
       // Intentar activar AudioContext una vez más
       if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
         try {
           await audioContextRef.current.resume();
-          console.log('✅ AudioContext reactivado, reintentando...');
+          console.log('✅ [playBeat] AudioContext reactivado, reintentando...');
           await beatAudio.play();
           setIsBeatPlaying(true);
           return true;
-        } catch (e) {
-          console.error('❌ Error después de reactivar AudioContext:', e);
+        } catch (e: any) {
+          console.error('❌ [playBeat] Error después de reactivar AudioContext:', e.name, e.message);
         }
       }
       return false;
@@ -160,10 +167,11 @@ function RoomPageContent() {
    * Pausa el beat (usado internamente y por eventos remotos)
    */
   const pauseBeat = () => {
+    console.log('⏸️ [pauseBeat] Pausando beat, beatAudio:', !!beatAudio, 'isHost:', isHost);
     if (beatAudio) {
       beatAudio.pause();
       setIsBeatPlaying(false);
-      console.log('⏸️ Beat pausado');
+      console.log('✅ [pauseBeat] Beat pausado correctamente');
     }
   };
 
@@ -195,17 +203,28 @@ function RoomPageContent() {
     const delay = Math.max(0, serverTimestamp - now);
 
     setTimeout(async () => {
+      console.log('🔵 [startBattle] Iniciando beat, delay:', delay, 'beatAudio:', !!beatAudio, 'isHost:', isHost);
       if (beatAudio) {
         beatAudio.currentTime = 0;
         const success = await playBeat();
+        console.log('🔵 [startBattle] playBeat resultado:', success, 'isHost:', isHost);
         
         // Si es host y el beat se reprodujo correctamente, enviar evento al guest
         if (isHost && success && signalingRef.current) {
-          console.log('🔵 Host: Enviando beat-play al guest');
-          signalingRef.current.send({
-            type: 'beat-play',
-          });
+          console.log('🔵 [startBattle] Host: Enviando beat-play al guest');
+          try {
+            await signalingRef.current.send({
+              type: 'beat-play',
+            });
+            console.log('✅ [startBattle] beat-play enviado correctamente');
+          } catch (error) {
+            console.error('❌ [startBattle] Error enviando beat-play:', error);
+          }
+        } else {
+          console.log('⚠️ [startBattle] No se envió beat-play - isHost:', isHost, 'success:', success, 'signaling:', !!signalingRef.current);
         }
+      } else {
+        console.error('❌ [startBattle] No hay beatAudio disponible');
       }
     }, delay);
   };
@@ -276,8 +295,11 @@ function RoomPageContent() {
       userIdRef.current,
       nickname,
       (message: SignalingMessage) => {
+        console.log('📨 [signaling] Mensaje recibido:', message.type, 'userId:', message.userId, 'mi userId:', userIdRef.current, 'isHost:', isHost);
+        
         // Filtrar nuestros propios mensajes (excepto user-joined que se maneja diferente)
         if (message.type !== 'user-joined' && message.userId === userIdRef.current) {
+          console.log('🔵 [signaling] Ignorando mensaje propio');
           return;
         }
 
@@ -297,11 +319,8 @@ function RoomPageContent() {
             startBattle(message.timestamp);
             break;
           case 'user-joined':
-            console.log('🔵 user-joined recibido:', message.userId, message.nickname, 'Mi userId:', userIdRef.current);
             if (message.userId !== userIdRef.current) {
-              console.log('🔵 Estableciendo remoteNickname:', message.nickname);
               setRemoteNickname(message.nickname);
-              console.log('✅ remoteNickname establecido correctamente');
               // Si es host, enviar el beat seleccionado y iniciar WebRTC (solo una vez)
               if (isHost && signalingRef.current && !webrtcStartedRef.current) {
                 console.log('🔵 Host: Iniciando WebRTC...');
@@ -333,12 +352,20 @@ function RoomPageContent() {
             break;
           case 'beat-play':
             // El guest recibe la orden de reproducir el beat
+            console.log('🎵 [beat-play] Evento recibido - isHost:', isHost, 'message.userId:', message.userId, 'mi userId:', userIdRef.current);
             if (!isHost && message.userId !== userIdRef.current) {
-              console.log('🔵 Recibida orden de reproducir beat');
+              console.log('✅ [beat-play] Procesando orden de reproducir beat (guest)');
               // Desbloquear audio primero (importante en móvil)
               unlockAudio().then(() => {
+                console.log('🔵 [beat-play] Audio desbloqueado, reproduciendo...');
+                playBeat();
+              }).catch((error) => {
+                console.error('❌ [beat-play] Error desbloqueando audio:', error);
+                // Intentar reproducir de todas formas
                 playBeat();
               });
+            } else {
+              console.log('⚠️ [beat-play] Ignorado - isHost:', isHost, 'userId match:', message.userId === userIdRef.current);
             }
             break;
           case 'beat-pause':

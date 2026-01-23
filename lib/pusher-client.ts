@@ -69,8 +69,10 @@ export class PusherSignalingClient {
 
           // Escuchar mensajes de signaling (client events y server events)
           this.channel.bind('client-signaling', (data: SignalingMessage) => {
+            console.log('📥 [Pusher] client-signaling recibido:', data.type, 'userId:', data.userId, 'mi userId:', this.userId);
             // No procesar nuestros propios mensajes
             if (data.userId && data.userId === this.userId) {
+              console.log('🔵 [Pusher] Ignorando mensaje propio');
               return;
             }
             this.onMessage(data);
@@ -231,7 +233,7 @@ export class PusherSignalingClient {
    */
   async send(message: SignalingMessage) {
     if (!this.channel || !this.isConnected) {
-      console.warn('Pusher no está conectado');
+      console.warn('⚠️ [Pusher] No está conectado');
       return;
     }
 
@@ -241,6 +243,8 @@ export class PusherSignalingClient {
         ...message,
         userId: this.userId,
       };
+      
+      console.log('📤 [Pusher] Enviando mensaje:', message.type, 'userId:', this.userId);
 
 
       // Para mensajes WebRTC, usar el servidor para evitar límite de client events
@@ -272,11 +276,16 @@ export class PusherSignalingClient {
           this.trigger('signaling', messageWithUser);
         }
       } else {
-        // Para otros mensajes (ready, beat-selected, etc), usar client events
-        this.trigger('signaling', messageWithUser);
+        // Para otros mensajes (ready, beat-selected, beat-play, etc), usar client events
+        const triggered = this.trigger('signaling', messageWithUser);
+        if (triggered) {
+          console.log('✅ [Pusher] Mensaje enviado (client event):', message.type);
+        } else {
+          console.error('❌ [Pusher] No se pudo enviar mensaje (client event):', message.type);
+        }
       }
     } catch (error) {
-      console.error('❌ Error enviando mensaje a Pusher:', error);
+      console.error('❌ [Pusher] Error enviando mensaje:', error);
     }
   }
 
