@@ -323,6 +323,27 @@ function RoomPageContent() {
               setSelectedBeat(message.beatNumber);
             }
             break;
+          case 'beat-play':
+            // El guest recibe la orden de reproducir el beat
+            if (!isHost && message.userId !== userIdRef.current) {
+              console.log('🔵 Recibida orden de reproducir beat');
+              playBeat();
+            }
+            break;
+          case 'beat-pause':
+            // El guest recibe la orden de pausar el beat
+            if (!isHost && message.userId !== userIdRef.current) {
+              console.log('🔵 Recibida orden de pausar beat');
+              pauseBeat();
+            }
+            break;
+          case 'beat-restart':
+            // El guest recibe la orden de reiniciar el beat
+            if (!isHost && message.userId !== userIdRef.current) {
+              console.log('🔵 Recibida orden de reiniciar beat');
+              restartBeatInternal();
+            }
+            break;
         }
       },
       (connected: boolean) => {
