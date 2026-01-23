@@ -64,53 +64,18 @@ export class PusherSignalingClient {
       const channelName = `private-room-${this.roomId}`;
       this.channel = this.pusher.subscribe(channelName);
 
-      // Escuchar cuando la suscripción es exitosa
-      this.channel.bind('pusher:subscription_succeeded', () => {
-        console.log('✅ Suscrito al canal de Pusher');
-        this.isConnected = true;
-        if (this.onConnectionChange) {
-          this.onConnectionChange(true);
+      // IMPORTANTE: Hacer bindings ANTES de que se complete la suscripción
+      // para no perder mensajes que lleguen temprano
+
+      // Escuchar mensajes de signaling (client events)
+      this.channel.bind('client-signaling', (data: SignalingMessage) => {
+        // No procesar nuestros propios mensajes
+        if (data.userId && data.userId === this.userId) {
+          return;
         }
-        // Notificar que el usuario se unió (con delay para asegurar que el otro cliente esté listo)
-        setTimeout(() => {
-          console.log('👤 Enviando user-joined:', this.userId, this.nickname);
-          this.trigger('user-joined', {
-            userId: this.userId,
-            nickname: this.nickname,
-          });
-        }, 500); // Aumentado a 500ms para dar más tiempo
+        console.log('📨 Mensaje recibido:', data.type);
+        this.onMessage(data);
       });
-
-      // Eventos de conexión
-      this.pusher.connection.bind('connected', () => {
-        console.log('Pusher conectado');
-      });
-
-      this.pusher.connection.bind('disconnected', () => {
-        console.log('Pusher desconectado');
-        this.isConnected = false;
-        if (this.onConnectionChange) {
-          this.onConnectionChange(false);
-        }
-      });
-
-      this.pusher.connection.bind('error', (err: any) => {
-        console.error('Error de conexión Pusher:', err);
-        this.isConnected = false;
-        if (this.onConnectionChange) {
-          this.onConnectionChange(false);
-        }
-      });
-
-          // Escuchar mensajes de signaling (client events)
-          this.channel.bind('client-signaling', (data: SignalingMessage) => {
-            // No procesar nuestros propios mensajes
-            if (data.userId && data.userId === this.userId) {
-              return;
-            }
-            console.log('📨 Mensaje recibido:', data.type);
-            this.onMessage(data);
-          });
 
       // Escuchar cuando otros usuarios se unen (client events)
       this.channel.bind('client-user-joined', (data: { userId: string; nickname: string }) => {
@@ -134,6 +99,59 @@ export class PusherSignalingClient {
             type: 'user-left',
             userId: data.userId,
           });
+        }
+      });
+
+      // Escuchar cuando la suscripción es exitosa
+      this.channel.bind('pusher:subscription_succeeded', () => {
+        console.log('✅ Suscrito al canal de Pusher');
+        this.isConnected = true;
+        if (this.onConnectionChange) {
+          this.onConnectionChange(true);
+        }
+        // Notificar que el usuario se unió inmediatamente
+        console.log('👤 Enviando user-joined:', this.userId, this.nickname);
+        this.trigger('user-joined', {
+          userId: this.userId,
+          nickname: this.nickname,
+        });
+        
+        // Reenviar periódicamente para asegurar que el otro usuario lo reciba
+        // (útil si hay problemas de timing)
+        let retryCount = 0;
+        const maxRetries = 5;
+        const retryInterval = setInterval(() => {
+          if (retryCount < maxRetries) {
+            console.log(`👤 Reenviando user-joined (intento ${retryCount + 1}/${maxRetries})`);
+            this.trigger('user-joined', {
+              userId: this.userId,
+              nickname: this.nickname,
+            });
+            retryCount++;
+          } else {
+            clearInterval(retryInterval);
+          }
+        }, 1000); // Cada segundo, hasta 5 veces
+      });
+
+      // Eventos de conexión
+      this.pusher.connection.bind('connected', () => {
+        console.log('Pusher conectado');
+      });
+
+      this.pusher.connection.bind('disconnected', () => {
+        console.log('Pusher desconectado');
+        this.isConnected = false;
+        if (this.onConnectionChange) {
+          this.onConnectionChange(false);
+        }
+      });
+
+      this.pusher.connection.bind('error', (err: any) => {
+        console.error('Error de conexión Pusher:', err);
+        this.isConnected = false;
+        if (this.onConnectionChange) {
+          this.onConnectionChange(false);
         }
       });
     } catch (error) {
