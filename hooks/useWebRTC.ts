@@ -82,10 +82,16 @@ export function useWebRTC({
    * Crea y configura la conexión RTCPeerConnection
    */
   const createPeerConnection = useCallback(() => {
-    // Cerrar conexión anterior si existe
+    // Solo cerrar y recrear si la conexión actual está cerrada
     if (peerConnectionRef.current) {
-      console.log('🔵 Cerrando peer connection anterior...');
-      peerConnectionRef.current.close();
+      const currentState = peerConnectionRef.current.signalingState;
+      if (currentState === 'closed') {
+        console.log('🔵 Cerrando peer connection anterior (estado: closed)...');
+        peerConnectionRef.current.close();
+      } else {
+        console.log('🔵 Peer connection ya existe y está activa (estado:', currentState, '), reutilizando...');
+        return; // Reutilizar la conexión existente
+      }
     }
     
     const pc = new RTCPeerConnection(rtcConfig);
@@ -246,14 +252,18 @@ export function useWebRTC({
    */
   useEffect(() => {
     let mounted = true;
+    let peerConnectionCreated = false;
 
     const setup = async () => {
       // 1. Obtener stream local
       const stream = await initializeLocalStream();
       if (!stream || !mounted) return;
 
-      // 2. Crear conexión peer
-      createPeerConnection();
+      // 2. Crear conexión peer solo si no existe
+      if (!peerConnectionRef.current) {
+        createPeerConnection();
+        peerConnectionCreated = true;
+      }
 
       // 3. Si es host, crear offer cuando el remoto esté listo
       if (isHost && sendMessageRef.current) {
@@ -276,15 +286,20 @@ export function useWebRTC({
 
     return () => {
       mounted = false;
-      // Limpiar recursos
+      // Solo limpiar si realmente creamos la conexión en este efecto
+      // No limpiar si la conexión se creó en otro lugar (como startWebRTC)
+      if (peerConnectionCreated && peerConnectionRef.current) {
+        console.log('🔵 Limpiando peer connection del useEffect...');
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      // Limpiar stream local
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => track.stop());
-      }
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
+        localStreamRef.current = null;
       }
     };
-  }, [roomId, userId, nickname, isHost, sendSignalingMessage, initializeLocalStream, createPeerConnection, createOffer]);
+  }, [roomId, userId, nickname, isHost, sendSignalingMessage, initializeLocalStream, createPeerConnection, createOffer, waitForRemote]);
 
   // Exponer función para manejar mensajes de signaling
   const handleSignalingMessage = useCallback((message: SignalingMessage) => {
