@@ -119,7 +119,10 @@ function RoomPageContent() {
                 // Iniciar WebRTC cuando el remoto esté detectado
                 setTimeout(() => {
                   if (startWebRTC) {
+                    console.log('🔵 Remoto detectado, iniciando WebRTC...');
                     startWebRTC();
+                  } else {
+                    console.warn('⚠️ startWebRTC no está disponible');
                   }
                 }, 1000);
               }

@@ -109,37 +109,27 @@ export class PusherSignalingClient {
           this.onConnectionChange(true);
         }
         
-        // Función para enviar user-joined
-        const sendUserJoined = () => {
-          console.log('👤 Enviando user-joined:', this.userId, this.nickname);
-          const success = this.trigger('user-joined', {
-            userId: this.userId,
-            nickname: this.nickname,
-          });
-          if (!success) {
-            console.warn('⚠️ No se pudo enviar user-joined (canal no listo)');
-          }
-        };
-        
         // Notificar que el usuario se unió inmediatamente
-        sendUserJoined();
+        this.trigger('user-joined', {
+          userId: this.userId,
+          nickname: this.nickname,
+        });
         
-        // Reenviar periódicamente para asegurar que el otro usuario lo reciba
-        // (útil si hay problemas de timing)
+        // Reenviar silenciosamente para asegurar que el otro usuario lo reciba
+        // (sin logs excesivos)
         let retryCount = 0;
-        const maxRetries = 5;
+        const maxRetries = 3; // Reducido a 3
         const retryInterval = setInterval(() => {
           if (retryCount < maxRetries && this.isConnected) {
-            console.log(`👤 Reenviando user-joined (intento ${retryCount + 1}/${maxRetries})`);
-            sendUserJoined();
+            this.trigger('user-joined', {
+              userId: this.userId,
+              nickname: this.nickname,
+            });
             retryCount++;
           } else {
-            if (retryCount >= maxRetries) {
-              console.log('👤 Finalizado reintentos de user-joined');
-            }
             clearInterval(retryInterval);
           }
-        }, 1000); // Cada segundo, hasta 5 veces
+        }, 1500); // Cada 1.5 segundos
       });
 
       // Eventos de conexión
