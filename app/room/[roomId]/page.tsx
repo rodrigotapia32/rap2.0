@@ -36,6 +36,7 @@ function RoomPageContent() {
   const [beatAudio, setBeatAudio] = useState<HTMLAudioElement | null>(null);
   const [selectedBeat, setSelectedBeat] = useState<number>(1);
   const [websocketConnected, setWebsocketConnected] = useState(false);
+  const [isBeatPlaying, setIsBeatPlaying] = useState(false);
 
   const userIdRef = useRef(`user-${Date.now()}-${Math.random()}`);
   const signalingRef = useRef<PusherSignalingClient | null>(null);
@@ -62,8 +63,41 @@ function RoomPageContent() {
         beatAudio.play().catch((error) => {
           console.error('Error reproduciendo beat:', error);
         });
+        setIsBeatPlaying(true);
       }
     }, delay);
+  };
+
+  /**
+   * Pausa o reanuda el beat
+   */
+  const toggleBeat = () => {
+    if (beatAudio) {
+      if (isBeatPlaying) {
+        beatAudio.pause();
+        setIsBeatPlaying(false);
+      } else {
+        beatAudio.play().catch((error) => {
+          console.error('Error reproduciendo beat:', error);
+        });
+        setIsBeatPlaying(true);
+      }
+    }
+  };
+
+  /**
+   * Reinicia el beat desde el principio
+   */
+  const restartBeat = () => {
+    if (beatAudio) {
+      beatAudio.currentTime = 0;
+      if (!isBeatPlaying) {
+        beatAudio.play().catch((error) => {
+          console.error('Error reproduciendo beat:', error);
+        });
+        setIsBeatPlaying(true);
+      }
+    }
   };
 
   /**
@@ -232,8 +266,18 @@ function RoomPageContent() {
     audio.loop = true;
     audio.volume = 0.5;
     setBeatAudio(audio);
+    setIsBeatPlaying(false);
+
+    // Escuchar eventos de pausa/reproducción para mantener el estado sincronizado
+    const handlePlay = () => setIsBeatPlaying(true);
+    const handlePause = () => setIsBeatPlaying(false);
+
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
 
     return () => {
+      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('pause', handlePause);
       audio.pause();
       audio.src = '';
     };
@@ -384,6 +428,26 @@ function RoomPageContent() {
           </div>
         )}
       </div>
+
+      {battleStarted && beatAudio && (
+        <div className={styles.beatControls}>
+          <label className={styles.label}>Controles del Beat:</label>
+          <div className={styles.beatButtons}>
+            <button
+              onClick={toggleBeat}
+              className={styles.beatButton}
+            >
+              {isBeatPlaying ? '⏸️ Pausar' : '▶️ Reproducir'}
+            </button>
+            <button
+              onClick={restartBeat}
+              className={styles.beatButton}
+            >
+              🔄 Reiniciar
+            </button>
+          </div>
+        </div>
+      )}
 
       {!battleStarted && websocketConnected && isConnected && remoteNickname && !isReady && (
         <button onClick={handleReady} className={styles.readyButton}>

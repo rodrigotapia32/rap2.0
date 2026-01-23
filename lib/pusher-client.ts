@@ -126,11 +126,12 @@ export class PusherSignalingClient {
           console.warn('⚠️ No se pudo enviar user-joined (client events no habilitados?)');
         }
         
-        // Reenviar para asegurar que el otro usuario lo reciba
+        // Reenviar para asegurar que el otro usuario lo reciba (especialmente importante en móvil)
         let retryCount = 0;
-        const maxRetries = 3;
+        const maxRetries = 5; // Aumentado para móvil
         const retryInterval = setInterval(() => {
           if (retryCount < maxRetries && this.isConnected) {
+            console.log(`🔵 Reenviando user-joined (intento ${retryCount + 1}/${maxRetries})...`);
             this.trigger('user-joined', {
               userId: this.userId,
               nickname: this.nickname,
@@ -139,7 +140,7 @@ export class PusherSignalingClient {
           } else {
             clearInterval(retryInterval);
           }
-        }, 1500);
+        }, 1000); // Reducido a 1 segundo para móvil
       });
 
       // Eventos de conexión
