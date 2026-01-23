@@ -310,8 +310,19 @@ export function useWebRTC({
       return;
     }
     
+    // Si no hay peer connection, crearla primero
     if (!peerConnectionRef.current) {
-      console.error('❌ No hay peer connection disponible');
+      console.log('🔵 Creando peer connection...');
+      createPeerConnection();
+      // Esperar un momento para que se establezca
+      setTimeout(() => {
+        if (peerConnectionRef.current && sendMessageRef.current) {
+          console.log('🔵 Peer connection creada, creando oferta...');
+          createOffer();
+        } else {
+          console.error('❌ No se pudo crear peer connection o sendMessage no disponible');
+        }
+      }, 100);
       return;
     }
     
@@ -322,7 +333,7 @@ export function useWebRTC({
     
     console.log('🔵 Todas las condiciones cumplidas, creando oferta...');
     createOffer();
-  }, [isHost, createOffer]);
+  }, [isHost, createOffer, createPeerConnection]);
 
   return {
     localStream,

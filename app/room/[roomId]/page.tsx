@@ -188,11 +188,21 @@ function RoomPageContent() {
 
   // Configurar audio remoto
   useEffect(() => {
-    if (remoteStream && !remoteAudioRef.current) {
-      const audio = new Audio();
-      audio.srcObject = remoteStream;
-      audio.autoplay = true;
-      remoteAudioRef.current = audio;
+    if (remoteStream) {
+      // Crear o actualizar el elemento audio
+      if (!remoteAudioRef.current) {
+        const audio = document.createElement('audio');
+        audio.autoplay = true;
+        audio.setAttribute('playsinline', 'true');
+        document.body.appendChild(audio);
+        remoteAudioRef.current = audio;
+      }
+      
+      // Asignar el stream y reproducir
+      remoteAudioRef.current.srcObject = remoteStream;
+      remoteAudioRef.current.play().catch((error) => {
+        console.error('❌ Error reproduciendo audio remoto:', error);
+      });
     }
   }, [remoteStream]);
 
