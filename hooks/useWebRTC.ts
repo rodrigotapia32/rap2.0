@@ -67,15 +67,25 @@ export function useWebRTC({
     } catch (error: any) {
       console.error('Error accediendo al micrófono:', error);
       if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-        alert('Permisos de micrófono denegados. Por favor, permite el acceso al micrófono en la configuración del navegador.');
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        if (isMobile) {
+          alert('Permisos de micrófono denegados.\n\nEn móvil:\n1. Toca el ícono de candado en la barra de direcciones\n2. Permite el acceso al micrófono\n3. Recarga la página\n\nO ve a Configuración del navegador → Permisos → Micrófono');
+        } else {
+          alert('Permisos de micrófono denegados.\n\nPor favor:\n1. Haz click en el ícono de candado en la barra de direcciones\n2. Permite el acceso al micrófono\n3. Recarga la página');
+        }
+        // Continuar sin micrófono (solo escucha)
+        console.warn('⚠️ Continuando sin micrófono (solo modo escucha)');
+        return null;
       } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
         alert('No se encontró ningún micrófono. Verifica que tengas un micrófono conectado.');
+        return null;
       } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
         alert('El micrófono está siendo usado por otra aplicación. Cierra otras aplicaciones que puedan estar usando el micrófono.');
+        return null;
       } else {
         alert('No se pudo acceder al micrófono. Error: ' + error.message);
+        return null;
       }
-      return null;
     }
   }, []);
 

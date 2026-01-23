@@ -405,6 +405,11 @@ function RoomPageContent() {
             <p className={styles.statusText} style={{ fontSize: '0.85rem', color: '#888', marginTop: '0.5rem' }}>
               Si estás probando en el mismo PC, asegúrate de permitir el acceso al micrófono en ambas ventanas
             </p>
+            {!localStream && (
+              <p className={styles.statusText} style={{ fontSize: '0.85rem', color: '#f5576c', marginTop: '0.5rem' }}>
+                ⚠️ Micrófono no disponible. Podrás escuchar pero no hablar.
+              </p>
+            )}
           </div>
         )}
         {isConnected && !remoteNickname && (
