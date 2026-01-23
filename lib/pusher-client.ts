@@ -49,7 +49,6 @@ export class PusherSignalingClient {
     try {
       this.pusher = new Pusher(pusherKey, {
         cluster: pusherCluster,
-        encrypted: true,
         // Habilitar client events
         enabledTransports: ['ws', 'wss'],
       });

@@ -1,10 +1,10 @@
 'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import styles from '../page.module.css';
 
-export default function JoinRoom() {
+function JoinRoomContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const nickname = searchParams.get('nickname') || '';
@@ -53,5 +53,13 @@ export default function JoinRoom() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function JoinRoom() {
+  return (
+    <Suspense fallback={<div className={styles.container}>Cargando...</div>}>
+      <JoinRoomContent />
+    </Suspense>
   );
 }

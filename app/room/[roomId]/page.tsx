@@ -1,14 +1,14 @@
 'use client';
 
 import { useSearchParams, useParams } from 'next/navigation';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { useAudioControls } from '@/hooks/useAudioControls';
 import { SignalingMessage } from '@/lib/websocket';
 import { PusherSignalingClient } from '@/lib/pusher-client';
 import styles from './room.module.css';
 
-export default function RoomPage() {
+function RoomPageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   // Decodificar roomId correctamente y validar
@@ -437,5 +437,13 @@ export default function RoomPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RoomPage() {
+  return (
+    <Suspense fallback={<div className={styles.container}>Cargando...</div>}>
+      <RoomPageContent />
+    </Suspense>
   );
 }

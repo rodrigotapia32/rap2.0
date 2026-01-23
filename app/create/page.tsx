@@ -1,10 +1,10 @@
 'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import styles from '../page.module.css';
 
-export default function CreateRoom() {
+function CreateRoomContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const nickname = searchParams.get('nickname') || '';
@@ -133,5 +133,13 @@ export default function CreateRoom() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function CreateRoom() {
+  return (
+    <Suspense fallback={<div className={styles.container}>Cargando...</div>}>
+      <CreateRoomContent />
+    </Suspense>
   );
 }
