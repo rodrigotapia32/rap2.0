@@ -73,10 +73,6 @@ export class PusherSignalingClient {
             if (data.userId && data.userId === this.userId) {
               return;
             }
-            // Solo log para mensajes WebRTC importantes
-            if (data.type === 'offer' || data.type === 'answer' || data.type === 'ice-candidate') {
-              console.log('🔵 WebRTC:', data.type);
-            }
             this.onMessage(data);
           });
 
@@ -85,10 +81,6 @@ export class PusherSignalingClient {
             // No procesar nuestros propios mensajes
             if (data.userId && data.userId === this.userId) {
               return;
-            }
-            // Solo log para mensajes WebRTC importantes
-            if (data.type === 'offer' || data.type === 'answer' || data.type === 'ice-candidate') {
-              console.log('🔵 WebRTC (servidor):', data.type);
             }
             this.onMessage(data);
           });
@@ -190,16 +182,11 @@ export class PusherSignalingClient {
         userId: this.userId,
       };
 
-      // Solo log para mensajes WebRTC importantes
-      if (message.type === 'offer' || message.type === 'answer' || message.type === 'ice-candidate') {
-        console.log('🔵 WebRTC enviando:', message.type);
-      }
 
       // Para mensajes WebRTC, usar el servidor para evitar límite de client events
       if (message.type === 'offer' || message.type === 'answer' || message.type === 'ice-candidate') {
         const channelName = `private-room-${this.roomId}`;
         try {
-          console.log(`🔵 Enviando ${message.type} a través del servidor...`);
           const response = await fetch('/api/pusher/trigger', {
             method: 'POST',
             headers: {
@@ -218,7 +205,6 @@ export class PusherSignalingClient {
             // Fallback a client events si el servidor falla
             this.trigger('signaling', messageWithUser);
           } else {
-            console.log(`✅ ${message.type} enviado correctamente a través del servidor`);
           }
         } catch (error) {
           console.warn('⚠️ Error con servidor, fallback a client events:', error);

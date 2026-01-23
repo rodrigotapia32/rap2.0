@@ -254,19 +254,14 @@ function RoomPageContent() {
 
   /**
    * Inicia cuenta regresiva cuando ambos están listos
-   * El contador se ejecuta en ambos usuarios simultáneamente
    */
   useEffect(() => {
-    // Limpiar cuando la batalla empieza o cuando los estados cambian
-    if (battleStarted || !isReady || !remoteReady) {
-      if (countdownIntervalRef.current) {
-        console.log('🔵 Limpiando interval del countdown (condición cambiada)');
-        clearInterval(countdownIntervalRef.current);
-        countdownIntervalRef.current = null;
-      }
-      if (battleStarted) {
-        countdownStartedRef.current = false;
-      }
+    // Limpiar solo si las condiciones cambian y el countdown está activo
+    if ((battleStarted || !isReady || !remoteReady) && countdownIntervalRef.current) {
+      console.log('🔵 Limpiando interval (condiciones cambiaron)');
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+      countdownStartedRef.current = false;
       return;
     }
 
@@ -289,32 +284,19 @@ function RoomPageContent() {
             countdownIntervalRef.current = null;
           }
           countdownStartedRef.current = false;
-          console.log('🔵 Countdown terminado, iniciando batalla...');
+          console.log('🔵 Countdown terminado');
 
-          // El host envía el timestamp de inicio para sincronizar el beat
           if (isHost && signalingRef.current) {
-            // Dar 1 segundo adicional después del "GO" para que el beat comience
             const startTime = Date.now() + 1000;
-            console.log('🔵 Host: Enviando start-battle con timestamp:', startTime);
             signalingRef.current.send({
               type: 'start-battle',
               timestamp: startTime,
             });
-            // El host también inicia su batalla
             startBattle(startTime);
           }
         }
       }, 1000);
     }
-
-    return () => {
-      // Solo limpiar en unmount
-      if (countdownIntervalRef.current) {
-        console.log('🔵 Limpiando interval del countdown (unmount)');
-        clearInterval(countdownIntervalRef.current);
-        countdownIntervalRef.current = null;
-      }
-    };
   }, [isReady, remoteReady, battleStarted, isHost, startBattle]);
 
   if (!nickname) {

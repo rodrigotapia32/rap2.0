@@ -168,14 +168,11 @@ export function useWebRTC({
         offerToReceiveVideo: false,
       });
       await pc.setLocalDescription(offer);
-      console.log('🔵 Oferta creada, enviando...');
-
       if (sendMessageRef.current) {
         sendMessageRef.current({
           type: 'offer',
           offer: offer,
         });
-        console.log('🔵 Oferta enviada a través de signaling');
       } else {
         console.error('❌ sendMessageRef.current no está disponible');
       }
@@ -205,19 +202,15 @@ export function useWebRTC({
     }
 
     try {
-      console.log('🔵 Guest: Recibiendo oferta, estableciendo remote description...');
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      console.log('🔵 Guest: Creando respuesta...');
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      console.log('🔵 Guest: Respuesta creada, enviando...');
 
       if (sendMessageRef.current) {
         sendMessageRef.current({
           type: 'answer',
           answer: answer,
         });
-        console.log('🔵 Guest: Respuesta enviada');
       }
     } catch (error: any) {
       console.error('❌ Error manejando offer:', error);
