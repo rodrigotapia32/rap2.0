@@ -95,47 +95,34 @@ export function useWebRTC({
     // Manejar cambios de estado de conexión
     pc.onconnectionstatechange = () => {
       const state = pc.connectionState;
-      console.log('🔵 WebRTC connection state:', state);
       if (onConnectionStateChange) {
         onConnectionStateChange(state);
       }
       setIsConnected(state === 'connected');
       
-      // Log estados importantes
+      // Solo log estados importantes
       if (state === 'connected') {
-        console.log('✅ WebRTC conectado exitosamente!');
+        console.log('✅ Audio conectado!');
       } else if (state === 'failed') {
-        console.error('❌ WebRTC connection failed');
-      } else if (state === 'disconnected') {
-        console.warn('⚠️ Conexión WebRTC desconectada');
+        console.error('❌ Error de conexión de audio');
       }
     };
 
     // Manejar cambios de ICE connection state
     pc.oniceconnectionstatechange = () => {
-      console.log('🧊 ICE connection state:', pc.iceConnectionState);
       if (pc.iceConnectionState === 'failed') {
-        console.error('❌ ICE connection failed - intentando restart...');
-        // Intentar restart ICE
+        console.error('❌ Error ICE - reiniciando...');
         pc.restartIce();
       }
-    };
-
-    // Manejar cambios de ICE gathering state
-    pc.onicegatheringstatechange = () => {
-      console.log('🔍 ICE gathering state:', pc.iceGatheringState);
     };
 
     // Manejar ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate && sendMessageRef.current) {
-        console.log('🧊 Enviando ICE candidate:', event.candidate.type);
         sendMessageRef.current({
           type: 'ice-candidate',
           candidate: event.candidate,
         });
-      } else if (!event.candidate) {
-        console.log('🧊 ICE gathering completado');
       }
     };
 
@@ -160,20 +147,17 @@ export function useWebRTC({
     }
 
     try {
-      console.log('📤 Host: Creando oferta WebRTC...');
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: false,
       });
       await pc.setLocalDescription(offer);
-      console.log('📤 Host: Oferta creada y local description establecida');
 
       if (sendMessageRef.current) {
         sendMessageRef.current({
           type: 'offer',
           offer: offer,
         });
-        console.log('📤 Host: Oferta enviada a través de signaling');
       }
     } catch (error) {
       console.error('❌ Error creando offer:', error);
@@ -191,12 +175,9 @@ export function useWebRTC({
     }
 
     try {
-      console.log('Guest: Recibiendo oferta, estableciendo remote description...');
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      console.log('Guest: Creando respuesta...');
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      console.log('Guest: Enviando respuesta...');
 
       if (sendMessageRef.current) {
         sendMessageRef.current({
@@ -205,7 +186,7 @@ export function useWebRTC({
         });
       }
     } catch (error) {
-      console.error('Error manejando offer:', error);
+      console.error('❌ Error manejando offer:', error);
     }
   }, []);
 
@@ -220,11 +201,9 @@ export function useWebRTC({
     }
 
     try {
-      console.log('Host: Recibiendo respuesta, estableciendo remote description...');
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      console.log('Host: Respuesta establecida correctamente');
     } catch (error) {
-      console.error('Error manejando answer:', error);
+      console.error('❌ Error manejando answer:', error);
     }
   }, []);
 
@@ -240,7 +219,6 @@ export function useWebRTC({
 
     try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      console.log('🧊 ICE candidate agregado correctamente');
     } catch (error) {
       console.error('❌ Error agregando ICE candidate:', error);
     }
@@ -266,15 +244,14 @@ export function useWebRTC({
       createPeerConnection();
 
       // 3. Si es host, crear offer después de un breve delay
-      // Esperar a que el WebSocket esté listo antes de crear la oferta
+      // Esperar a que Pusher esté listo antes de crear la oferta
       if (isHost && sendMessageRef.current) {
-        // Esperar un poco más para asegurar que el invitado esté listo
+        // Esperar a que ambos usuarios estén conectados
         setTimeout(() => {
           if (mounted && peerConnectionRef.current) {
-            console.log('Host: Creando oferta WebRTC...');
             createOffer();
           }
-        }, 2000);
+        }, 3000); // Aumentado a 3 segundos para dar tiempo a que ambos se conecten
       }
     };
 

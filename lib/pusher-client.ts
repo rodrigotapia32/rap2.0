@@ -67,28 +67,27 @@ export class PusherSignalingClient {
       // IMPORTANTE: Hacer bindings ANTES de que se complete la suscripción
       // para no perder mensajes que lleguen temprano
 
-      // Escuchar mensajes de signaling (client events)
-      this.channel.bind('client-signaling', (data: SignalingMessage) => {
-        // No procesar nuestros propios mensajes
-        if (data.userId && data.userId === this.userId) {
-          return;
-        }
-        console.log('📨 Mensaje recibido:', data.type);
-        this.onMessage(data);
-      });
+          // Escuchar mensajes de signaling (client events)
+          this.channel.bind('client-signaling', (data: SignalingMessage) => {
+            // No procesar nuestros propios mensajes
+            if (data.userId && data.userId === this.userId) {
+              return;
+            }
+            // Solo log para mensajes WebRTC importantes
+            if (data.type === 'offer' || data.type === 'answer' || data.type === 'ice-candidate') {
+              console.log('🔵 WebRTC:', data.type);
+            }
+            this.onMessage(data);
+          });
 
       // Escuchar cuando otros usuarios se unen (client events)
       this.channel.bind('client-user-joined', (data: { userId: string; nickname: string }) => {
-        console.log('👤 Recibido client-user-joined:', data);
         if (data.userId !== this.userId) {
-          console.log('👤 Procesando user-joined para:', data.nickname);
           this.onMessage({
             type: 'user-joined',
             userId: data.userId,
             nickname: data.nickname,
           });
-        } else {
-          console.log('👤 Ignorando user-joined propio');
         }
       });
 
@@ -187,7 +186,10 @@ export class PusherSignalingClient {
           userId: this.userId,
         };
 
-        console.log('📤 Enviando mensaje:', message.type);
+        // Solo log para mensajes WebRTC importantes
+        if (message.type === 'offer' || message.type === 'answer' || message.type === 'ice-candidate') {
+          console.log('🔵 WebRTC enviando:', message.type);
+        }
         // Enviar a través del canal usando client events
         this.trigger('signaling', messageWithUser);
       } catch (error) {

@@ -83,12 +83,8 @@ function RoomPageContent() {
       userIdRef.current,
       nickname,
       (message: SignalingMessage) => {
-        console.log('📬 Mensaje recibido en RoomPage:', message.type, 'de:', message.userId);
-        
-        // Para user-joined, NO filtrar por userId aquí porque necesitamos procesarlo
-        // Los otros mensajes sí se filtran
+        // Filtrar nuestros propios mensajes (excepto user-joined que se maneja diferente)
         if (message.type !== 'user-joined' && message.userId === userIdRef.current) {
-          console.log('🚫 Ignorando mensaje propio (no user-joined):', message.type);
           return;
         }
 
@@ -101,7 +97,6 @@ function RoomPageContent() {
         switch (message.type) {
           case 'ready':
             if (message.userId !== userIdRef.current) {
-              console.log('✅ Oponente está listo');
               setRemoteReady(true);
             }
             break;
@@ -110,13 +105,11 @@ function RoomPageContent() {
             break;
           case 'user-joined':
             if (message.userId !== userIdRef.current) {
-              console.log('👤 Usuario unido detectado:', message.nickname);
               setRemoteNickname(message.nickname);
               // Si es host, enviar el beat seleccionado al nuevo invitado
               if (isHost && signalingRef.current) {
                 setTimeout(() => {
                   if (signalingRef.current) {
-                    console.log('🎵 Host enviando beat seleccionado al invitado');
                     signalingRef.current.send({
                       type: 'beat-selected',
                       beatNumber: selectedBeat,
@@ -124,14 +117,11 @@ function RoomPageContent() {
                   }
                 }, 500);
               }
-            } else {
-              console.log('👤 Ignorando user-joined propio');
             }
             break;
           case 'beat-selected':
             // El invitado recibe el beat seleccionado por el host
             if (!isHost && message.userId !== userIdRef.current) {
-              console.log('🎵 Invitado recibió beat seleccionado:', message.beatNumber);
               setSelectedBeat(message.beatNumber);
             }
             break;
@@ -167,14 +157,9 @@ function RoomPageContent() {
         remoteAudioRef.current.srcObject = stream;
       }
     },
-    onConnectionStateChange: (state) => {
-      console.log('Estado de conexión WebRTC:', state);
-      if (state === 'failed') {
-        console.error('La conexión WebRTC falló. Esto puede deberse a problemas de red o firewall.');
-      } else if (state === 'disconnected') {
-        console.warn('Conexión WebRTC desconectada');
-      }
-    },
+      onConnectionStateChange: (state) => {
+        // El estado se maneja en useWebRTC con logs apropiados
+      },
   });
 
   // Guardar referencia al handler de mensajes WebRTC
