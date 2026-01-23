@@ -51,6 +51,13 @@ export class PusherSignalingClient {
         cluster: pusherCluster,
         // Habilitar client events
         enabledTransports: ['ws', 'wss'],
+        // Endpoint de autenticación para canales privados
+        authEndpoint: '/api/pusher/auth',
+        auth: {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        },
       });
 
       // Suscribirse al canal de la sala (usando private channel para client events)

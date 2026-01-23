@@ -314,14 +314,14 @@ function RoomPageContent() {
       </div>
 
       <div className={styles.status}>
-        {!websocketConnected && (
-          <div>
-            <p className={styles.statusText}>Conectando al servidor...</p>
-            <p className={styles.statusText} style={{ fontSize: '0.85rem', color: '#888', marginTop: '0.5rem' }}>
-              Si el problema persiste, verifica que el servidor WebSocket esté corriendo (npm run ws)
-            </p>
-          </div>
-        )}
+            {!websocketConnected && (
+              <div>
+                <p className={styles.statusText}>Conectando al servidor...</p>
+                <p className={styles.statusText} style={{ fontSize: '0.85rem', color: '#888', marginTop: '0.5rem' }}>
+                  Estableciendo conexión con Pusher...
+                </p>
+              </div>
+            )}
         {websocketConnected && !isConnected && (
           <div>
             <p className={styles.statusText}>Estableciendo conexión de audio...</p>

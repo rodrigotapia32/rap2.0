@@ -21,9 +21,9 @@ Pusher es un servicio de WebSocket que funciona perfectamente con Vercel. Sigue 
 ## 3. Obtener credenciales
 
 En la página de tu app, ve a la pestaña "App Keys". Verás:
-- **app_id**
-- **key** (esta es la que necesitas)
-- **secret** (no la necesitas para el cliente)
+- **app_id** (necesario para autenticación de canales privados)
+- **key** (necesario para el cliente)
+- **secret** (necesario para autenticación de canales privados)
 - **cluster** (ej: us2, eu, ap1)
 
 ## 4. Configurar variables de entorno
@@ -35,6 +35,8 @@ Crea un archivo `.env.local` en la raíz del proyecto:
 ```env
 NEXT_PUBLIC_PUSHER_KEY=tu_key_aqui
 NEXT_PUBLIC_PUSHER_CLUSTER=us2
+PUSHER_APP_ID=tu_app_id_aqui
+PUSHER_SECRET=tu_secret_aqui
 ```
 
 ### Vercel
@@ -44,6 +46,8 @@ NEXT_PUBLIC_PUSHER_CLUSTER=us2
 3. Agrega:
    - `NEXT_PUBLIC_PUSHER_KEY` = tu key de Pusher
    - `NEXT_PUBLIC_PUSHER_CLUSTER` = tu cluster (ej: us2)
+   - `PUSHER_APP_ID` = tu app_id de Pusher
+   - `PUSHER_SECRET` = tu secret de Pusher
 
 ## 5. Habilitar Client Events (⚠️ CRÍTICO)
 

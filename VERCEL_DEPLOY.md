@@ -19,12 +19,18 @@ El código está en: https://github.com/rodrigotapia32/rap2.0.git
 Antes de hacer deploy, agrega estas variables:
 
 1. En la página de configuración del proyecto, ve a "Environment Variables"
-2. Agrega estas dos variables:
+2. Agrega estas **cuatro** variables (necesitas el `app_id` y `secret` del dashboard de Pusher):
 
 ```
 NEXT_PUBLIC_PUSHER_KEY = cb5daaae59105d0c5bc1
 NEXT_PUBLIC_PUSHER_CLUSTER = us2
+PUSHER_APP_ID = 2105961
+PUSHER_SECRET = b16d04c0163af1a5a60e
 ```
+
+⚠️ **IMPORTANTE**: 
+- `NEXT_PUBLIC_*` son públicas (visibles en el cliente)
+- `PUSHER_APP_ID` y `PUSHER_SECRET` son privadas (solo servidor)
 
 3. Asegúrate de que estén marcadas para:
    - ✅ Production
