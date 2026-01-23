@@ -50,7 +50,8 @@ function CreateRoomContent() {
   };
 
   const handleCopyLink = async () => {
-    const link = `${window.location.origin}/room/${roomId}?nickname=${encodeURIComponent(nickname)}&isHost=true`;
+    // Link de invitación que incluye el código pero no el nickname
+    const link = `${window.location.origin}/?roomId=${roomId}`;
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
