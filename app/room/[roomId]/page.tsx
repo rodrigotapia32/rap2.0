@@ -197,7 +197,15 @@ function RoomPageContent() {
     setTimeout(async () => {
       if (beatAudio) {
         beatAudio.currentTime = 0;
-        await playBeat();
+        const success = await playBeat();
+        
+        // Si es host y el beat se reprodujo correctamente, enviar evento al guest
+        if (isHost && success && signalingRef.current) {
+          console.log('🔵 Host: Enviando beat-play al guest');
+          signalingRef.current.send({
+            type: 'beat-play',
+          });
+        }
       }
     }, delay);
   };
@@ -327,7 +335,10 @@ function RoomPageContent() {
             // El guest recibe la orden de reproducir el beat
             if (!isHost && message.userId !== userIdRef.current) {
               console.log('🔵 Recibida orden de reproducir beat');
-              playBeat();
+              // Desbloquear audio primero (importante en móvil)
+              unlockAudio().then(() => {
+                playBeat();
+              });
             }
             break;
           case 'beat-pause':
