@@ -43,6 +43,7 @@ function RoomPageContent() {
   const webrtcHandleMessageRef = useRef<((message: SignalingMessage) => void) | null>(null);
   const webrtcStartedRef = useRef(false); // Prevenir múltiples inicios de WebRTC
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null); // Ref para el interval del countdown
+  const countdownStartedRef = useRef(false); // Ref para rastrear si el countdown ya se inició
 
   /**
    * Inicia la batalla cuando ambos están listos
@@ -256,15 +257,21 @@ function RoomPageContent() {
    * El contador se ejecuta en ambos usuarios simultáneamente
    */
   useEffect(() => {
+    // Resetear el flag si la batalla no ha empezado y ambos están listos
+    if (!isReady || !remoteReady || battleStarted) {
+      countdownStartedRef.current = false;
+    }
+
     // Limpiar interval anterior si existe
     if (countdownIntervalRef.current) {
       clearInterval(countdownIntervalRef.current);
       countdownIntervalRef.current = null;
     }
 
-    // Solo iniciar countdown si ambos están listos, la batalla no ha empezado, y el countdown no está activo
-    if (isReady && remoteReady && !battleStarted && countdown === null) {
+    // Solo iniciar countdown si ambos están listos, la batalla no ha empezado, y el countdown no se ha iniciado
+    if (isReady && remoteReady && !battleStarted && !countdownStartedRef.current) {
       console.log('🔵 Iniciando countdown...');
+      countdownStartedRef.current = true;
       let count = 3;
       setCountdown(count);
 
@@ -279,6 +286,7 @@ function RoomPageContent() {
             clearInterval(countdownIntervalRef.current);
             countdownIntervalRef.current = null;
           }
+          countdownStartedRef.current = false;
           console.log('🔵 Countdown terminado, iniciando batalla...');
 
           // El host envía el timestamp de inicio para sincronizar el beat
@@ -304,7 +312,7 @@ function RoomPageContent() {
         countdownIntervalRef.current = null;
       }
     };
-  }, [isReady, remoteReady, battleStarted, countdown, isHost, startBattle]);
+  }, [isReady, remoteReady, battleStarted, isHost, startBattle]);
 
   if (!nickname) {
     return <div className={styles.container}>Cargando...</div>;
