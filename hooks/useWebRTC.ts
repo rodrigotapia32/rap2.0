@@ -296,9 +296,10 @@ export function useWebRTC({
     let peerConnectionCreated = false;
 
     const setup = async () => {
-      // 1. Obtener stream local
+      // 1. Intentar obtener stream local (puede fallar si no hay permisos)
       const stream = await initializeLocalStream();
-      if (!stream || !mounted) return;
+      // Continuar incluso si no hay stream (modo solo escucha)
+      if (!mounted) return;
 
       // 2. Crear conexión peer solo si no existe
       if (!peerConnectionRef.current) {
