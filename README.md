@@ -72,35 +72,30 @@ Coloca los archivos de beats en `public/beats/`:
 
 ## Deploy en Vercel
 
-### ✅ Configurado con Pusher
+### ✅ Código ya subido a GitHub
 
-El proyecto está configurado para usar **Pusher** como servicio de WebSocket, que funciona perfectamente con Vercel.
+El repositorio está en: https://github.com/rodrigotapia32/rap2.0.git
 
-### Pasos para Deploy
+### 🚀 Pasos Rápidos para Deploy
 
-1. **Configurar Pusher** (ver `PUSHER_SETUP.md`):
-   - Crear cuenta en [pusher.com](https://pusher.com)
-   - Crear una app
-   - Obtener `key` y `cluster`
+1. **Conectar con Vercel**:
+   - Ve a [vercel.com](https://vercel.com)
+   - Inicia sesión con GitHub
+   - Importa el repositorio `rodrigotapia32/rap2.0`
 
-2. **Variables de entorno en Vercel**:
+2. **Configurar Variables de Entorno** (antes de deploy):
    ```
-   NEXT_PUBLIC_PUSHER_KEY=tu_pusher_key
+   NEXT_PUBLIC_PUSHER_KEY=cb5daaae59105d0c5bc1
    NEXT_PUBLIC_PUSHER_CLUSTER=us2
    ```
 
-3. **Push a GitHub y conectar Vercel**:
-   ```bash
-   git add .
-   git commit -m "Preparado para deploy"
-   git push origin main
-   ```
-   - Ve a [vercel.com](https://vercel.com)
-   - Importa el repositorio
-   - Agrega las variables de entorno
-   - Deploy automático
+3. **Habilitar Client Events en Pusher**:
+   - Dashboard Pusher → App "smooth-hat-411"
+   - Settings → App Settings → Habilitar "Client Events"
 
-Ver `PUSHER_SETUP.md` para instrucciones detalladas.
+4. **Deploy**: Click en "Deploy" y espera 2-3 minutos
+
+**Ver `VERCEL_DEPLOY.md` para guía completa paso a paso.**
 
 ## Uso
 
