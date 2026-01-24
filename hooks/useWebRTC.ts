@@ -149,10 +149,12 @@ export function useWebRTC({
       if (currentState === 'closed') {
         peerConnectionRef.current.close();
       } else {
-        return; // Reutilizar la conexión existente
+        console.log('⚠️ Reutilizando peer connection existente:', currentState);
+        return peerConnectionRef.current; // Reutilizar la conexión existente
       }
     }
     
+    console.log('🆕 Creando nueva peer connection');
     const pc = new RTCPeerConnection(rtcConfig);
     peerConnectionRef.current = pc;
 
