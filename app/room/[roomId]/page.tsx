@@ -606,6 +606,17 @@ function RoomPageContent() {
   // Configurar audio remoto
   useEffect(() => {
     if (remoteStream) {
+      console.log('🎧 Stream remoto recibido:', {
+        id: remoteStream.id,
+        active: remoteStream.active,
+        tracks: remoteStream.getTracks().map(t => ({
+          kind: t.kind,
+          enabled: t.enabled,
+          muted: t.muted,
+          readyState: t.readyState,
+        })),
+      });
+      
       // Crear o actualizar el elemento audio
       if (!remoteAudioRef.current) {
         const audio = document.createElement('audio');
@@ -614,6 +625,7 @@ function RoomPageContent() {
         audio.setAttribute('muted', 'false');
         document.body.appendChild(audio);
         remoteAudioRef.current = audio;
+        console.log('✅ Elemento de audio remoto creado');
       }
       
       // Verificar que el stream tenga tracks de audio
@@ -627,13 +639,26 @@ function RoomPageContent() {
       const enabledTracks = audioTracks.filter(track => track.enabled);
       if (enabledTracks.length === 0) {
         console.warn('⚠️ Todos los tracks de audio remoto están deshabilitados');
+      } else {
+        console.log(`✅ ${enabledTracks.length} track(s) de audio remoto habilitado(s)`);
       }
       
       // Asignar el stream y reproducir
       remoteAudioRef.current.srcObject = remoteStream;
       remoteAudioRef.current.volume = 1; // Asegurar que el volumen esté al máximo
       remoteAudioRef.current.muted = false; // Asegurar que no esté muteado
-      remoteAudioRef.current.play().catch((error) => {
+      
+      // Verificar estado del elemento audio
+      console.log('🎵 Estado del elemento audio remoto:', {
+        volume: remoteAudioRef.current.volume,
+        muted: remoteAudioRef.current.muted,
+        paused: remoteAudioRef.current.paused,
+        readyState: remoteAudioRef.current.readyState,
+      });
+      
+      remoteAudioRef.current.play().then(() => {
+        console.log('✅ Audio remoto reproduciéndose');
+      }).catch((error) => {
         console.error('❌ Error reproduciendo audio remoto:', error);
       });
       
@@ -648,7 +673,21 @@ function RoomPageContent() {
         track.onunmute = () => {
           console.log('✅ Track de audio remoto fue desmuteado');
         };
+        track.onended = () => {
+          console.warn('⚠️ Track de audio remoto terminó');
+        };
       });
+      
+      // Escuchar cambios en el stream
+      remoteStream.onaddtrack = (event) => {
+        console.log('✅ Track agregado al stream remoto:', event.track.kind);
+        if (event.track.kind === 'audio' && remoteAudioRef.current) {
+          remoteAudioRef.current.srcObject = remoteStream;
+          remoteAudioRef.current.play().catch((error) => {
+            console.error('❌ Error reproduciendo audio remoto después de agregar track:', error);
+          });
+        }
+      };
     }
   }, [remoteStream]);
 

@@ -134,13 +134,32 @@ export function useWebRTC({
 
     // Manejar stream remoto
     pc.ontrack = (event) => {
+      console.log('📡 Evento ontrack recibido:', {
+        streams: event.streams.length,
+        track: {
+          kind: event.track.kind,
+          enabled: event.track.enabled,
+          muted: event.track.muted,
+          readyState: event.track.readyState,
+        },
+      });
+      
       // Asegurarse de que hay un stream y tracks
       if (event.streams && event.streams.length > 0 && onRemoteStream) {
-        onRemoteStream(event.streams[0]);
+        const stream = event.streams[0];
+        console.log('✅ Stream remoto encontrado en evento:', {
+          id: stream.id,
+          active: stream.active,
+          tracks: stream.getTracks().length,
+        });
+        onRemoteStream(stream);
       } else if (event.track && onRemoteStream) {
         // Si no hay stream pero hay track, crear uno nuevo
+        console.log('⚠️ No hay stream en evento, creando uno nuevo con el track');
         const newStream = new MediaStream([event.track]);
         onRemoteStream(newStream);
+      } else {
+        console.warn('⚠️ Evento ontrack sin stream ni track válido');
       }
     };
 
@@ -258,12 +277,25 @@ export function useWebRTC({
       // Asegurarse de que el stream local esté agregado antes de crear la respuesta
       if (localStreamRef.current) {
         const audioTracks = localStreamRef.current.getAudioTracks();
-        if (audioTracks.length > 0 && pc.getSenders().length === 0) {
-          audioTracks.forEach((track) => {
-            // Asegurarse de que el track esté habilitado
-            track.enabled = true;
-            pc.addTrack(track, localStreamRef.current!);
-          });
+        if (audioTracks.length > 0) {
+          const senders = pc.getSenders();
+          if (senders.length === 0) {
+            console.log('📤 Agregando tracks locales a peer connection (guest):', audioTracks.length);
+            audioTracks.forEach((track) => {
+              // Asegurarse de que el track esté habilitado
+              track.enabled = true;
+              pc.addTrack(track, localStreamRef.current!);
+              console.log('✅ Track local agregado:', {
+                enabled: track.enabled,
+                muted: track.muted,
+                readyState: track.readyState,
+              });
+            });
+          } else {
+            console.log('⚠️ Ya hay senders en la peer connection, no se agregarán tracks duplicados');
+          }
+        } else {
+          console.warn('⚠️ No hay tracks de audio en el stream local');
         }
       }
       
