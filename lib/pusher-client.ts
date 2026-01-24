@@ -223,15 +223,23 @@ export class PusherSignalingClient {
 
       // Eventos de conexión
       this.pusher.connection.bind('connected', () => {
-        console.log('Pusher conectado');
+        console.log('✅ Pusher: Conexión establecida');
       });
 
       this.pusher.connection.bind('disconnected', () => {
-        console.log('Pusher desconectado');
+        console.log('⚠️ Pusher: Desconectado');
         this.isConnected = false;
         if (this.onConnectionChange) {
           this.onConnectionChange(false);
         }
+      });
+      
+      this.pusher.connection.bind('error', (error: any) => {
+        console.error('❌ Pusher: Error de conexión:', error);
+      });
+      
+      this.pusher.connection.bind('state_change', (states: any) => {
+        console.log('🔄 Pusher: Cambio de estado:', states);
       });
 
       this.pusher.connection.bind('error', (err: any) => {
