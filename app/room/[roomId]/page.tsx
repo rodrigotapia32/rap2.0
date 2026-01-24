@@ -914,27 +914,6 @@ function RoomPageContent() {
         </div>
       )}
 
-      {/* Controles de micrófono */}
-      {isConnected && localStream && (
-        <div className={styles.beatControls}>
-          <label className={styles.label}>Micrófono:</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <button
-              onClick={toggleMicrophone}
-              className={styles.beatButton}
-              style={{
-                background: isMicMuted ? '#f5576c' : '#10b981',
-                flex: '0 0 auto',
-              }}
-            >
-              {isMicMuted ? '🎤 Micrófono Muteado' : '🎤 Micrófono Activo'}
-            </button>
-            <span style={{ color: '#888', fontSize: '0.9rem' }}>
-              {isMicMuted ? 'Tu micrófono está desactivado' : 'Tu micrófono está activo'}
-            </span>
-          </div>
-        </div>
-      )}
 
       {!battleStarted && websocketConnected && isConnected && remoteNickname && !isReady && (
         <button onClick={handleReady} className={styles.readyButton}>
