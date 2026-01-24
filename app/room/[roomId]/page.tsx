@@ -515,6 +515,10 @@ function RoomPageContent() {
 
   // ─── Load Beat Audio (routed through Web Audio API) ───
   useEffect(() => {
+    // Guardar el estado de reproducción antes de cambiar el beat
+    const wasPlaying = isBeatPlaying;
+    const previousAudio = beatAudioRef.current;
+
     const audio = new Audio(`/beats/beat${selectedBeat}.mp3`);
     audio.loop = true;
     audio.setAttribute('playsinline', 'true');
@@ -554,10 +558,36 @@ function RoomPageContent() {
     };
 
     // Setup after element is ready
+    const tryPlay = async () => {
+      if (wasPlaying && battleStarted) {
+        try {
+          // Esperar a que el audio esté listo para reproducirse
+          let attempts = 0;
+          const maxAttempts = 30;
+          while (audio.readyState < 2 && attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+          }
+          
+          if (audio.readyState >= 2) {
+            await audioContextManager.tryResume();
+            await audio.play();
+            setIsBeatPlaying(true);
+          }
+        } catch {
+          // Si falla, no reproducir automáticamente
+        }
+      }
+    };
+
     if (audio.readyState >= 1) {
       setupWebAudio();
+      tryPlay();
     } else {
-      audio.addEventListener('loadedmetadata', setupWebAudio, { once: true });
+      audio.addEventListener('loadedmetadata', () => {
+        setupWebAudio();
+        tryPlay();
+      }, { once: true });
     }
 
     return () => {
@@ -761,7 +791,7 @@ function RoomPageContent() {
         </button>
       )}
 
-      {!battleStarted && isHost && (
+      {isHost && (
         <div className={styles.beatSelector}>
           <label className={styles.label}>Seleccionar beat:</label>
           <div className={styles.beatButtons}>
@@ -793,7 +823,7 @@ function RoomPageContent() {
         </div>
       )}
 
-      {!battleStarted && !isHost && (
+      {!isHost && (
         <div className={styles.beatSelector}>
           <label className={styles.label}>Beat seleccionado:</label>
           <div className={styles.beatInfo}>
