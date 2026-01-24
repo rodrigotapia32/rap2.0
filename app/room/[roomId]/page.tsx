@@ -198,14 +198,17 @@ function RoomPageContent() {
         const success = await playBeat();
         
         // Si es host y el beat se reprodujo correctamente, enviar evento al guest
+        // Agregar un pequeño delay para dar tiempo a que el guest cargue el beat
         if (isHost && success && signalingRef.current) {
-          try {
-            await signalingRef.current.send({
-              type: 'beat-play',
-            });
-          } catch (error) {
-            console.error('❌ Error enviando beat-play:', error);
-          }
+          setTimeout(async () => {
+            try {
+              await signalingRef.current.send({
+                type: 'beat-play',
+              });
+            } catch (error) {
+              console.error('❌ Error enviando beat-play:', error);
+            }
+          }, 200); // 200ms de delay para dar tiempo a que el guest cargue el beat
         }
       }
     }, delay);
@@ -332,14 +335,31 @@ function RoomPageContent() {
             break;
           case 'beat-play':
             // El guest recibe la orden de reproducir el beat
-            if (!isHost && beatAudio) {
-              // Desbloquear audio primero (importante en móvil)
-              unlockAudio().then(() => {
-                playBeat();
-              }).catch(() => {
-                // Intentar reproducir de todas formas
-                playBeat();
-              });
+            if (!isHost) {
+              // Esperar a que el beat esté cargado si aún no lo está
+              const tryPlayBeat = async () => {
+                // Esperar hasta que el beat esté cargado (máximo 2 segundos)
+                let attempts = 0;
+                const maxAttempts = 20; // 20 intentos * 100ms = 2 segundos
+                while (!beatAudio && attempts < maxAttempts) {
+                  await new Promise(resolve => setTimeout(resolve, 100));
+                  attempts++;
+                }
+                
+                if (beatAudio) {
+                  // Desbloquear audio primero (importante en móvil)
+                  unlockAudio().then(() => {
+                    playBeat();
+                  }).catch(() => {
+                    // Intentar reproducir de todas formas
+                    playBeat();
+                  });
+                } else {
+                  console.error('❌ Beat no está cargado después de esperar');
+                }
+              };
+              
+              tryPlayBeat();
             }
             break;
           case 'beat-pause':
