@@ -234,8 +234,6 @@ export class PusherSignalingClient {
         ...message,
         userId: this.userId,
       };
-      
-      console.log('📤 [Pusher] Enviando mensaje:', message.type, 'userId:', this.userId);
 
 
       // Para mensajes WebRTC, usar el servidor para evitar límite de client events
