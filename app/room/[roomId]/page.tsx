@@ -610,7 +610,7 @@ function RoomPageContent() {
       console.log('🎵 Conectando stream remoto a elemento audio HTML');
       remoteAudioRef.current.srcObject = remoteStream;
       remoteAudioRef.current.autoplay = true;
-      remoteAudioRef.current.playsInline = true;
+      remoteAudioRef.current.setAttribute('playsinline', 'true');
       remoteAudioRef.current.volume = remoteVolume;
       
       // Intentar reproducir
