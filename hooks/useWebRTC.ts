@@ -216,23 +216,37 @@ export function useWebRTC({
     // Manejar cambios de estado de conexión
     pc.onconnectionstatechange = () => {
       const state = pc.connectionState;
+      console.log('🔌 Estado de conexión WebRTC:', state);
       if (onConnectionStateChange) {
         onConnectionStateChange(state);
       }
       setIsConnected(state === 'connected');
       
-      // Solo log estados importantes
+      // Log estados importantes
       if (state === 'connected') {
+        console.log('✅ Conexión WebRTC establecida');
       } else if (state === 'failed') {
         console.error('❌ Error de conexión de audio');
+      } else if (state === 'disconnected') {
+        console.warn('⚠️ Conexión WebRTC desconectada');
+      } else if (state === 'connecting') {
+        console.log('🔄 Conectando WebRTC...');
       }
     };
 
     // Manejar cambios de ICE connection state
     pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === 'failed') {
+      const iceState = pc.iceConnectionState;
+      console.log('🧊 Estado ICE:', iceState);
+      if (iceState === 'failed') {
         console.error('❌ Error ICE - reiniciando...');
         pc.restartIce();
+      } else if (iceState === 'connected') {
+        console.log('✅ ICE conectado');
+      } else if (iceState === 'checking') {
+        console.log('🔍 ICE verificando conexión...');
+      } else if (iceState === 'completed') {
+        console.log('✅ ICE completado');
       }
     };
 
