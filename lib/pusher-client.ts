@@ -78,7 +78,7 @@ export class PusherSignalingClient {
       });
 
       // Peer hello ack
-      this.channel.bind('peer-hello-ack', (data: { userId: string; targetUserId: string; sessionId: string }) => {
+      this.channel.bind('peer-hello-ack', (data: { userId: string; targetUserId: string; nickname: string; sessionId: string }) => {
         if (data.userId === this.userId) return;
         if (data.targetUserId !== this.userId) return; // Not for us
         this.onMessage({ type: 'peer-hello-ack', ...data });

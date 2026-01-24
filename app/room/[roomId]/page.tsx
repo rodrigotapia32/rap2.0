@@ -230,11 +230,12 @@ function RoomPageContent() {
             remoteUserIdRef.current = remoteId;
             setPeerState('handshaking');
 
-            // Send ack back
+            // Send ack back (include our nickname so peer learns it)
             signalingRef.current?.send({
               type: 'peer-hello-ack',
               userId: userIdRef.current,
               targetUserId: remoteId,
+              nickname,
               sessionId,
             });
 
@@ -246,7 +247,8 @@ function RoomPageContent() {
           }
 
           case 'peer-hello-ack': {
-            const { userId: remoteId } = message;
+            const { userId: remoteId, nickname: remoteNick } = message;
+            setRemoteNickname(remoteNick);
             if (!remoteUserIdRef.current) {
               remoteUserIdRef.current = remoteId;
             }
