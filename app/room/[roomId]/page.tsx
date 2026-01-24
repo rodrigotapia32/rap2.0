@@ -192,17 +192,18 @@ function RoomPageContent() {
    * Inicia la batalla cuando ambos están listos
    */
   const startBattle = async (serverTimestamp: number) => {
+    // No limpiar countdown inmediatamente, dejar que termine naturalmente
+    // setCountdown(null); // Comentado para que el countdown se vea
     setBattleStarted(true);
-    setCountdown(null);
 
     // Asegurarse de que el audio esté desbloqueado antes de iniciar
     await unlockAudio();
 
     // Calcular delay basado en el timestamp del servidor
-    // En móviles, agregar un buffer adicional para compensar la latencia
+    // Reducir buffer en móviles para minimizar delay
     const now = Date.now();
     const baseDelay = Math.max(0, serverTimestamp - now);
-    const mobileBuffer = isMobile ? 1000 : 0; // 1 segundo adicional en móviles
+    const mobileBuffer = isMobile ? 200 : 0; // Reducido de 1000ms a 200ms
     const delay = baseDelay + mobileBuffer;
 
     setTimeout(async () => {
@@ -212,14 +213,15 @@ function RoomPageContent() {
         const success = await playBeat();
         
         // Si es host y el beat se reprodujo correctamente, enviar evento al guest
-        // En móviles, esperar más tiempo para asegurar que el guest esté listo
+        // Reducir delay para mejor sincronización
         if (isHost && success && signalingRef.current) {
-          const hostDelay = isMobile ? 500 : 200; // Más delay en móviles
+          const hostDelay = isMobile ? 100 : 50; // Reducido significativamente
           setTimeout(async () => {
             if (signalingRef.current) {
               try {
                 // Enviar timestamp junto con beat-play para mejor sincronización
-                const playTimestamp = Date.now() + 100; // 100ms en el futuro para dar tiempo
+                // Reducir el timestamp futuro para menos delay
+                const playTimestamp = Date.now() + 50; // Reducido de 100ms a 50ms
                 await signalingRef.current.send({
                   type: 'beat-play',
                   timestamp: playTimestamp, // Timestamp para sincronización
@@ -694,10 +696,12 @@ function RoomPageContent() {
   useEffect(() => {
     // Limpiar solo si las condiciones cambian y el countdown está activo
     if ((battleStarted || !isReady || !remoteReady) && countdownIntervalRef.current) {
-      console.log('🔵 Limpiando interval (condiciones cambiaron)');
       clearInterval(countdownIntervalRef.current);
       countdownIntervalRef.current = null;
       countdownStartedRef.current = false;
+      if (battleStarted) {
+        setCountdown(null);
+      }
       return;
     }
 
