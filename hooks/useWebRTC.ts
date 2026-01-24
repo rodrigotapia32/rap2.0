@@ -201,10 +201,16 @@ export function useWebRTC({
     if (localStreamRef.current) {
       const audioTracks = localStreamRef.current.getAudioTracks();
       if (audioTracks.length > 0) {
+        console.log('📤 Agregando tracks locales al crear peer connection:', audioTracks.length);
         audioTracks.forEach((track) => {
           // Asegurarse de que el track esté habilitado
           track.enabled = true;
           pc.addTrack(track, localStreamRef.current!);
+          console.log('✅ Track local agregado al crear peer connection:', {
+            enabled: track.enabled,
+            muted: track.muted,
+            readyState: track.readyState,
+          });
         });
       } else {
         console.warn('⚠️ Stream local no tiene tracks de audio');
