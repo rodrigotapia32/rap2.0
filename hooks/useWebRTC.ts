@@ -322,40 +322,57 @@ export function useWebRTC({
     }
 
     try {
+      console.log('📥 Guest recibió oferta del host');
+      
       // Asegurarse de que el stream local esté agregado antes de crear la respuesta
       if (localStreamRef.current) {
         const audioTracks = localStreamRef.current.getAudioTracks();
+        const senders = pc.getSenders();
+        
+        console.log('📤 Guest preparando respuesta:', {
+          tracksDisponibles: audioTracks.length,
+          sendersExistentes: senders.length,
+        });
+        
         if (audioTracks.length > 0) {
-          const senders = pc.getSenders();
+          // Si no hay senders, agregar los tracks
           if (senders.length === 0) {
-            console.log('📤 Agregando tracks locales a peer connection (guest):', audioTracks.length);
+            console.log('📤 Agregando tracks locales antes de crear respuesta (guest)');
             audioTracks.forEach((track) => {
               // Asegurarse de que el track esté habilitado
               track.enabled = true;
               pc.addTrack(track, localStreamRef.current!);
-              console.log('✅ Track local agregado:', {
+              console.log('✅ Track local agregado antes de crear respuesta:', {
                 enabled: track.enabled,
                 muted: track.muted,
                 readyState: track.readyState,
               });
             });
           } else {
-            console.log('⚠️ Ya hay senders en la peer connection, no se agregarán tracks duplicados');
+            console.log('📤 Ya hay senders en la peer connection del guest');
           }
         } else {
-          console.warn('⚠️ No hay tracks de audio en el stream local');
+          console.warn('⚠️ No hay tracks de audio en el stream local del guest');
         }
+      } else {
+        console.warn('⚠️ No hay stream local disponible en el guest');
       }
       
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      console.log('✅ Guest estableció descripción remota');
+      
       const answer = await pc.createAnswer();
+      console.log('📤 Guest creó respuesta');
+      
       await pc.setLocalDescription(answer);
+      console.log('✅ Guest estableció descripción local');
 
       if (sendMessageRef.current) {
         sendMessageRef.current({
           type: 'answer',
           answer: answer,
         });
+        console.log('✅ Respuesta enviada al host');
       }
     } catch (error: any) {
       console.error('❌ Error manejando offer:', error);
