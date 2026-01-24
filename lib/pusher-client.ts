@@ -34,28 +34,16 @@ export class PusherSignalingClient {
    * Conecta a Pusher
    */
   connect() {
-    console.log('🔌 PusherSignalingClient: Iniciando conexión...', {
-      roomId: this.roomId,
-      userId: this.userId,
-      nickname: this.nickname,
-    });
-    
     const pusherKey = process.env.NEXT_PUBLIC_PUSHER_KEY;
     const pusherCluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER || 'us2';
 
     if (!pusherKey) {
       console.error('⚠️ NEXT_PUBLIC_PUSHER_KEY no está configurado');
-      console.error('💡 Configura tus variables de entorno en Vercel o .env.local');
       if (this.onConnectionChange) {
         this.onConnectionChange(false);
       }
       return;
     }
-
-    console.log('✅ Pusher: Clave encontrada, inicializando...', {
-      hasKey: !!pusherKey,
-      cluster: pusherCluster,
-    });
 
     try {
       this.pusher = new Pusher(pusherKey, {
@@ -102,23 +90,18 @@ export class PusherSignalingClient {
 
       // Escuchar cuando otros usuarios se unen (desde servidor)
       this.channel.bind('user-joined', (data: { userId: string; nickname: string }) => {
-        console.log('📥 Pusher: Evento user-joined recibido:', data);
         if (data.userId !== this.userId) {
-          console.log('✅ Pusher: user-joined es de otro usuario, procesando...');
           this.onMessage({
             type: 'user-joined',
             userId: data.userId,
             nickname: data.nickname,
           });
-        } else {
         }
       });
 
       // También escuchar client events como fallback
       this.channel.bind('client-user-joined', (data: { userId: string; nickname: string }) => {
-        console.log('🔵 Recibido client-user-joined (fallback):', data);
         if (data.userId !== this.userId) {
-          console.log('🔵 Procesando user-joined de otro usuario (fallback)');
           this.onMessage({
             type: 'user-joined',
             userId: data.userId,
@@ -140,18 +123,12 @@ export class PusherSignalingClient {
       // Escuchar cuando la suscripción es exitosa
       this.channel.bind('pusher:subscription_succeeded', async () => {
         const channelName = `private-room-${this.roomId}`;
-        console.log('✅ Pusher: Suscripción exitosa al canal:', channelName);
         this.isConnected = true;
         if (this.onConnectionChange) {
           this.onConnectionChange(true);
         }
         
         // Notificar que el usuario se unió usando el servidor (más confiable que client events)
-        console.log('📤 Pusher: Enviando user-joined al servidor...', {
-          userId: this.userId,
-          nickname: this.nickname,
-          channel: channelName,
-        });
         try {
           const response = await fetch('/api/pusher/trigger', {
             method: 'POST',
@@ -168,9 +145,7 @@ export class PusherSignalingClient {
             }),
           });
 
-          if (response.ok) {
-            console.log('✅ Pusher: user-joined enviado exitosamente al servidor');
-          } else {
+          if (!response.ok) {
             console.warn('⚠️ Pusher: Error al enviar user-joined al servidor, usando fallback');
             // Fallback a client events
             this.trigger('user-joined', {
@@ -219,7 +194,7 @@ export class PusherSignalingClient {
 
       // Eventos de conexión
       this.pusher.connection.bind('connected', () => {
-        console.log('✅ Pusher: Conexión establecida');
+        // Conexión establecida
       });
 
       this.pusher.connection.bind('disconnected', () => {
@@ -230,9 +205,7 @@ export class PusherSignalingClient {
       });
       
       this.pusher.connection.bind('error', (error: any) => {
-      });
-      
-      this.pusher.connection.bind('state_change', (states: any) => {
+        console.error('❌ Pusher: Error de conexión:', error);
       });
 
       this.pusher.connection.bind('error', (err: any) => {
@@ -242,7 +215,7 @@ export class PusherSignalingClient {
         }
       });
     } catch (error) {
-      console.error('Error conectando a Pusher:', error);
+      console.error('❌ Error conectando a Pusher:', error);
       if (this.onConnectionChange) {
         this.onConnectionChange(false);
       }
@@ -283,14 +256,10 @@ export class PusherSignalingClient {
           });
 
           if (!response.ok) {
-            const errorText = await response.text();
-            console.warn(`⚠️ Servidor falló (${response.status}), fallback a client events:`, errorText);
             // Fallback a client events si el servidor falla
             this.trigger('signaling', messageWithUser);
-          } else {
           }
         } catch (error) {
-          console.warn('⚠️ Error con servidor, fallback a client events:', error);
           // Fallback a client events si hay error
           this.trigger('signaling', messageWithUser);
         }

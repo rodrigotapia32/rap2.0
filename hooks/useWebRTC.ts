@@ -505,59 +505,48 @@ export function useWebRTC({
   }, [isHost, handleOffer, handleAnswer, handleIceCandidate]);
 
   // Exponer función para crear oferta manualmente (cuando el remoto esté listo)
-  const startWebRTC = useCallback(() => {
+  const startWebRTC = useCallback(async () => {
     if (!isHost) {
       return;
     }
     
-    // Verificar que el stream local esté disponible
+    // Intentar obtener el stream local si no está disponible
     if (!localStreamRef.current) {
-      let attempts = 0;
-      const maxAttempts = 6;
-      const checkStream = setInterval(() => {
-        attempts++;
-        if (localStreamRef.current && peerConnectionRef.current && sendMessageRef.current) {
-          clearInterval(checkStream);
-          createOffer();
-        } else if (attempts >= maxAttempts) {
-          console.error('❌ startWebRTC: Stream local aún no disponible después de esperar');
-          clearInterval(checkStream);
-        }
-      }, 500);
+      console.log('⏳ startWebRTC: Obteniendo stream local...');
+      const stream = await initializeLocalStream();
+      if (!stream) {
+        console.error('❌ startWebRTC: No se pudo obtener stream local');
+        return;
+      }
+      // Asegurarse de que el stream se guardó en la ref
+      if (!localStreamRef.current) {
+        localStreamRef.current = stream;
+        setLocalStream(stream);
+      }
+    }
+    
+    // Verificar que el stream esté disponible
+    if (!localStreamRef.current) {
+      console.error('❌ startWebRTC: Stream local no disponible después de obtenerlo');
       return;
     }
     
-    // Si no hay peer connection, crearla primero
+    // Asegurarse de que hay peer connection
     if (!peerConnectionRef.current) {
       createPeerConnection();
-      setTimeout(() => {
-        const pc = peerConnectionRef.current;
-        if (pc && sendMessageRef.current) {
-          if (pc.signalingState === 'closed') {
-            createPeerConnection();
-            setTimeout(() => {
-              if (peerConnectionRef.current && sendMessageRef.current) {
-                createOffer();
-              }
-            }, 100);
-            return;
-          }
-          createOffer();
-        }
-      }, 200);
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    
+    const pc = peerConnectionRef.current;
+    if (!pc) {
+      console.error('❌ startWebRTC: No se pudo crear peer connection');
       return;
     }
     
-    // Verificar que la conexión existente no esté cerrada
-    const pc = peerConnectionRef.current;
+    // Verificar que la conexión no esté cerrada
     if (pc.signalingState === 'closed') {
       createPeerConnection();
-      setTimeout(() => {
-        if (peerConnectionRef.current && sendMessageRef.current) {
-          createOffer();
-        }
-      }, 200);
-      return;
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
     
     if (!sendMessageRef.current) {
@@ -565,8 +554,26 @@ export function useWebRTC({
       return;
     }
     
+    // Asegurarse de que los tracks locales estén agregados
+    const senders = pc.getSenders();
+    const hasAudioSender = senders.some(sender => sender.track?.kind === 'audio');
+    
+    if (!hasAudioSender && localStreamRef.current) {
+      const audioTracks = localStreamRef.current.getAudioTracks();
+      if (audioTracks.length > 0) {
+        audioTracks.forEach((track) => {
+          track.enabled = true;
+          try {
+            pc.addTrack(track, localStreamRef.current!);
+          } catch (error) {
+            // Ignorar si ya fue agregado
+          }
+        });
+      }
+    }
+    
     createOffer();
-  }, [isHost, createOffer, createPeerConnection]);
+  }, [isHost, createOffer, createPeerConnection, initializeLocalStream]);
 
   return {
     localStream,
