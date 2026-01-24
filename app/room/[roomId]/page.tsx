@@ -321,6 +321,33 @@ function RoomPageContent() {
           case 'ready':
             if (message.userId !== userIdRef.current) {
               setRemoteReady(true);
+              // Si es host y el guest acaba de enviar ready, reenviar user-joined por si acaso
+              if (isHost && signalingRef.current && !remoteNickname) {
+                const channelName = `private-room-${roomId}`;
+                fetch('/api/pusher/trigger', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    channel: channelName,
+                    event: 'user-joined',
+                    data: {
+                      userId: userIdRef.current,
+                      nickname: nickname,
+                    },
+                  }),
+                }).catch(() => {
+                  // Fallback a client event
+                  if (signalingRef.current) {
+                    signalingRef.current.send({
+                      type: 'user-joined',
+                      userId: userIdRef.current,
+                      nickname: nickname,
+                    });
+                  }
+                });
+              }
             }
             break;
           case 'start-battle':
