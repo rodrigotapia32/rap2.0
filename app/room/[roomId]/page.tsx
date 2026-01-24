@@ -306,7 +306,8 @@ function RoomPageContent() {
         const isBeatControl = message.type === 'beat-play' || message.type === 'beat-pause' || message.type === 'beat-restart';
         
         // Filtrar nuestros propios mensajes (excepto user-joined y controles de beat que se manejan diferente)
-        if (message.type !== 'user-joined' && !isBeatControl && message.userId === userIdRef.current) {
+        // user-joined siempre debe procesarse para detectar cuando otros usuarios se unen
+        if (message.type !== 'user-joined' && !isBeatControl && message.userId && message.userId === userIdRef.current) {
           return;
         }
 
