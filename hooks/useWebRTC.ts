@@ -678,11 +678,11 @@ export function useWebRTC({
     // Verificar que el stream local esté disponible
     if (!localStreamRef.current) {
       console.warn('⚠️ startWebRTC: No hay stream local disponible, esperando...');
-      // Esperar un momento y reintentar
+      // Esperar un momento y reintentar (usar createOffer directamente en lugar de recursión)
       setTimeout(() => {
-        if (localStreamRef.current) {
-          console.log('✅ startWebRTC: Stream local ahora disponible, reintentando...');
-          startWebRTC();
+        if (localStreamRef.current && peerConnectionRef.current && sendMessageRef.current) {
+          console.log('✅ startWebRTC: Stream local ahora disponible, creando oferta...');
+          createOffer();
         } else {
           console.error('❌ startWebRTC: Stream local aún no disponible después de esperar');
         }
