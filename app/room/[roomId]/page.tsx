@@ -297,8 +297,11 @@ function RoomPageContent() {
       (message: SignalingMessage) => {
         console.log('📨 [signaling] Mensaje recibido:', message.type, 'userId:', message.userId, 'mi userId:', userIdRef.current, 'isHost:', isHost);
         
-        // Filtrar nuestros propios mensajes (excepto user-joined que se maneja diferente)
-        if (message.type !== 'user-joined' && message.userId === userIdRef.current) {
+        // Para beat-play, beat-pause, beat-restart, no filtrar por userId porque pueden no tenerlo
+        const isBeatControl = message.type === 'beat-play' || message.type === 'beat-pause' || message.type === 'beat-restart';
+        
+        // Filtrar nuestros propios mensajes (excepto user-joined y controles de beat que se manejan diferente)
+        if (message.type !== 'user-joined' && !isBeatControl && message.userId === userIdRef.current) {
           console.log('🔵 [signaling] Ignorando mensaje propio');
           return;
         }
@@ -355,7 +358,8 @@ function RoomPageContent() {
           case 'beat-play':
             // El guest recibe la orden de reproducir el beat
             console.log('🎵 [beat-play] Evento recibido - isHost:', isHost, 'message.userId:', message.userId, 'mi userId:', userIdRef.current);
-            if (!isHost && message.userId !== userIdRef.current) {
+            // El guest siempre debe procesar beat-play del host (no importa el userId)
+            if (!isHost) {
               console.log('✅ [beat-play] Procesando orden de reproducir beat (guest)');
               // Desbloquear audio primero (importante en móvil)
               unlockAudio().then(() => {
@@ -367,20 +371,20 @@ function RoomPageContent() {
                 playBeat();
               });
             } else {
-              console.log('⚠️ [beat-play] Ignorado - isHost:', isHost, 'userId match:', message.userId === userIdRef.current);
+              console.log('⚠️ [beat-play] Ignorado - es host, no debe procesar su propio mensaje');
             }
             break;
           case 'beat-pause':
             // El guest recibe la orden de pausar el beat
-            if (!isHost && message.userId !== userIdRef.current) {
-              console.log('🔵 Recibida orden de pausar beat');
+            if (!isHost) {
+              console.log('🔵 [beat-pause] Recibida orden de pausar beat (guest)');
               pauseBeat();
             }
             break;
           case 'beat-restart':
             // El guest recibe la orden de reiniciar el beat
-            if (!isHost && message.userId !== userIdRef.current) {
-              console.log('🔵 Recibida orden de reiniciar beat');
+            if (!isHost) {
+              console.log('🔵 [beat-restart] Recibida orden de reiniciar beat (guest)');
               restartBeatInternal();
             }
             break;
