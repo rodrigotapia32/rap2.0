@@ -668,12 +668,31 @@ export function useWebRTC({
 
   // Exponer función para crear oferta manualmente (cuando el remoto esté listo)
   const startWebRTC = useCallback(() => {
+    console.log('🚀 startWebRTC llamado', { isHost, hasPeerConnection: !!peerConnectionRef.current, hasSendMessage: !!sendMessageRef.current, hasLocalStream: !!localStreamRef.current });
+    
     if (!isHost) {
+      console.log('⚠️ startWebRTC: No es host, ignorando');
+      return;
+    }
+    
+    // Verificar que el stream local esté disponible
+    if (!localStreamRef.current) {
+      console.warn('⚠️ startWebRTC: No hay stream local disponible, esperando...');
+      // Esperar un momento y reintentar
+      setTimeout(() => {
+        if (localStreamRef.current) {
+          console.log('✅ startWebRTC: Stream local ahora disponible, reintentando...');
+          startWebRTC();
+        } else {
+          console.error('❌ startWebRTC: Stream local aún no disponible después de esperar');
+        }
+      }, 1000);
       return;
     }
     
     // Si no hay peer connection, crearla primero
     if (!peerConnectionRef.current) {
+      console.log('🆕 startWebRTC: Creando nueva peer connection');
       createPeerConnection();
       // Esperar un momento para que se establezca
       setTimeout(() => {
@@ -681,16 +700,21 @@ export function useWebRTC({
         if (pc && sendMessageRef.current) {
           // Verificar que la conexión no esté cerrada
           if (pc.signalingState === 'closed') {
+            console.warn('⚠️ startWebRTC: Peer connection cerrada, recreando...');
             createPeerConnection();
             setTimeout(() => {
               if (peerConnectionRef.current && sendMessageRef.current) {
+                console.log('✅ startWebRTC: Creando oferta después de recrear peer connection');
                 createOffer();
               }
             }, 100);
             return;
           }
           
+          console.log('✅ startWebRTC: Creando oferta con nueva peer connection');
           createOffer();
+        } else {
+          console.error('❌ startWebRTC: No hay peer connection o sendMessage después de crear');
         }
       }, 200);
       return;
@@ -699,9 +723,11 @@ export function useWebRTC({
     // Verificar que la conexión existente no esté cerrada
     const pc = peerConnectionRef.current;
     if (pc.signalingState === 'closed') {
+      console.warn('⚠️ startWebRTC: Peer connection existente cerrada, recreando...');
       createPeerConnection();
       setTimeout(() => {
         if (peerConnectionRef.current && sendMessageRef.current) {
+          console.log('✅ startWebRTC: Creando oferta después de recrear peer connection');
           createOffer();
         }
       }, 200);
@@ -709,9 +735,11 @@ export function useWebRTC({
     }
     
     if (!sendMessageRef.current) {
+      console.error('❌ startWebRTC: No hay sendMessage disponible');
       return;
     }
     
+    console.log('✅ startWebRTC: Creando oferta con peer connection existente');
     createOffer();
   }, [isHost, createOffer, createPeerConnection]);
 

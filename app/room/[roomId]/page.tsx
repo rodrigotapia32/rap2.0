@@ -407,8 +407,10 @@ function RoomPageContent() {
                 }, 500);
                 setTimeout(() => {
                   if (startWebRTC) {
+                    console.log('🎯 Host: Llamando startWebRTC después de recibir user-joined');
                     startWebRTC();
                   } else {
+                    console.error('❌ Host: startWebRTC no está disponible');
                     webrtcStartedRef.current = false;
                   }
                 }, 1000);
@@ -539,8 +541,10 @@ function RoomPageContent() {
       }, 500);
       setTimeout(() => {
         if (startWebRTC) {
+          console.log('🎯 Host: Llamando startWebRTC después de detectar guest existente');
           startWebRTC();
         } else {
+          console.error('❌ Host: startWebRTC no está disponible');
           webrtcStartedRef.current = false;
         }
       }, 1000);
