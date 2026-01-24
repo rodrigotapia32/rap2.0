@@ -180,9 +180,16 @@ export function useWebRTC({
 
     // Agregar stream local a la conexión
     if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => {
-        pc.addTrack(track, localStreamRef.current!);
-      });
+      const audioTracks = localStreamRef.current.getAudioTracks();
+      if (audioTracks.length > 0) {
+        audioTracks.forEach((track) => {
+          // Asegurarse de que el track esté habilitado
+          track.enabled = true;
+          pc.addTrack(track, localStreamRef.current!);
+        });
+      } else {
+        console.warn('⚠️ Stream local no tiene tracks de audio');
+      }
     }
 
     return pc;
@@ -199,10 +206,15 @@ export function useWebRTC({
 
     try {
       // Asegurarse de que el stream local esté agregado antes de crear la oferta
-      if (localStreamRef.current && pc.getSenders().length === 0) {
-        localStreamRef.current.getTracks().forEach((track) => {
-          pc.addTrack(track, localStreamRef.current!);
-        });
+      if (localStreamRef.current) {
+        const audioTracks = localStreamRef.current.getAudioTracks();
+        if (audioTracks.length > 0 && pc.getSenders().length === 0) {
+          audioTracks.forEach((track) => {
+            // Asegurarse de que el track esté habilitado
+            track.enabled = true;
+            pc.addTrack(track, localStreamRef.current!);
+          });
+        }
       }
       
       const offer = await pc.createOffer({
@@ -244,10 +256,15 @@ export function useWebRTC({
 
     try {
       // Asegurarse de que el stream local esté agregado antes de crear la respuesta
-      if (localStreamRef.current && pc.getSenders().length === 0) {
-        localStreamRef.current.getTracks().forEach((track) => {
-          pc.addTrack(track, localStreamRef.current!);
-        });
+      if (localStreamRef.current) {
+        const audioTracks = localStreamRef.current.getAudioTracks();
+        if (audioTracks.length > 0 && pc.getSenders().length === 0) {
+          audioTracks.forEach((track) => {
+            // Asegurarse de que el track esté habilitado
+            track.enabled = true;
+            pc.addTrack(track, localStreamRef.current!);
+          });
+        }
       }
       
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
@@ -344,11 +361,16 @@ export function useWebRTC({
         
         // Asegurarse de que el stream local se agregue después de crear la conexión
         if (stream && peerConnectionRef.current) {
-          stream.getTracks().forEach((track) => {
-            if (peerConnectionRef.current) {
-              peerConnectionRef.current.addTrack(track, stream);
-            }
-          });
+          const audioTracks = stream.getAudioTracks();
+          if (audioTracks.length > 0) {
+            audioTracks.forEach((track) => {
+              // Asegurarse de que el track esté habilitado
+              track.enabled = true;
+              if (peerConnectionRef.current) {
+                peerConnectionRef.current.addTrack(track, stream);
+              }
+            });
+          }
         }
       }
 

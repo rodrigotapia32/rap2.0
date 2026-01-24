@@ -40,6 +40,7 @@ function RoomPageContent() {
   const [selectedBeat, setSelectedBeat] = useState<number>(1);
   const [websocketConnected, setWebsocketConnected] = useState(false);
   const [isBeatPlaying, setIsBeatPlaying] = useState(false);
+  const [isMicMuted, setIsMicMuted] = useState(false);
 
   const userIdRef = useRef(`user-${Date.now()}-${Math.random()}`);
   const signalingRef = useRef<PusherSignalingClient | null>(null);
