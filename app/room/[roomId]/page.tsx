@@ -549,17 +549,6 @@ function RoomPageContent() {
               });
             }
           });
-          
-          // También solicitar al host que reenvíe su información
-          // Enviar un mensaje especial para solicitar el estado
-          setTimeout(() => {
-            if (signalingRef.current && !remoteNickname) {
-              signalingRef.current.send({
-                type: 'ready', // Usar ready como señal para que el host reenvíe su user-joined
-                userId: userIdRef.current,
-              });
-            }
-          }, 500);
         }
       }, 1000);
       
