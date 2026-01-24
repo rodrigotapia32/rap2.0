@@ -49,6 +49,7 @@ export function useWebRTC({
 
   const peersRef = useRef<Map<string, PeerConnectionEntry>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
+  const lastDeviceIdRef = useRef<string | undefined>(undefined);
   const sendMessageRef = useRef(sendSignalingMessage);
   const mountedRef = useRef(true);
   const onRemoteStreamRef = useRef(onRemoteStream);
@@ -96,7 +97,10 @@ export function useWebRTC({
    * Initialize local stream with progressive constraint fallback
    */
   const initializeLocalStream = useCallback(async (deviceId?: string): Promise<MediaStream | null> => {
-    if (localStreamRef.current && !deviceId &&
+    // Use stored deviceId if none provided and cached stream is dead
+    const effectiveDeviceId = deviceId ?? lastDeviceIdRef.current;
+
+    if (localStreamRef.current && !effectiveDeviceId &&
         localStreamRef.current.getAudioTracks().some(t => t.readyState === 'live')) {
       return localStreamRef.current;
     }
@@ -104,13 +108,14 @@ export function useWebRTC({
     for (let i = 0; i < CONSTRAINT_LEVELS.length; i++) {
       try {
         const constraints = structuredClone(CONSTRAINT_LEVELS[i]);
-        if (deviceId && typeof constraints.audio === 'object') {
-          (constraints.audio as MediaTrackConstraints).deviceId = { exact: deviceId };
-        } else if (deviceId) {
-          constraints.audio = { deviceId: { exact: deviceId } };
+        if (effectiveDeviceId && typeof constraints.audio === 'object') {
+          (constraints.audio as MediaTrackConstraints).deviceId = { exact: effectiveDeviceId };
+        } else if (effectiveDeviceId) {
+          constraints.audio = { deviceId: { exact: effectiveDeviceId } };
         }
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         stream.getAudioTracks().forEach(track => { track.enabled = true; });
+        lastDeviceIdRef.current = deviceId;
         localStreamRef.current = stream;
         setLocalStream(stream);
         return stream;
@@ -120,7 +125,7 @@ export function useWebRTC({
           console.warn('Microphone unavailable:', error.name);
           return null;
         }
-        if (error.name === 'OverconstrainedError' && deviceId) {
+        if (error.name === 'OverconstrainedError' && effectiveDeviceId) {
           // Device not available, fall back without deviceId constraint
           break;
         }
@@ -130,22 +135,45 @@ export function useWebRTC({
         }
       }
     }
-    // If deviceId caused OverconstrainedError, retry without it
-    if (deviceId) return initializeLocalStream();
+    // If device constraint caused OverconstrainedError, retry with system default
+    if (effectiveDeviceId) {
+      lastDeviceIdRef.current = undefined;
+      return initializeLocalStream();
+    }
     return null;
   }, []);
 
   /**
    * Replace the audio track in all active peer connections (no renegotiation)
    */
-  const replaceLocalStream = useCallback((newStream: MediaStream) => {
+  const replaceLocalStream = useCallback(async (newStream: MediaStream) => {
     const newTrack = newStream.getAudioTracks()[0];
     if (!newTrack) return;
 
     for (const [, entry] of peersRef.current) {
-      const sender = entry.pc.getSenders().find(s => s.track?.kind === 'audio');
+      // Find audio sender via transceiver (reliable even if sender.track is null)
+      let sender: RTCRtpSender | undefined;
+      if (entry.pc.getTransceivers) {
+        const transceiver = entry.pc.getTransceivers().find(t =>
+          t.sender && (t.sender.track?.kind === 'audio' || t.receiver?.track?.kind === 'audio')
+        );
+        sender = transceiver?.sender;
+      }
+      // Fallback: direct sender lookup
+      if (!sender) {
+        sender = entry.pc.getSenders().find(s => s.track?.kind === 'audio') ||
+                 entry.pc.getSenders()[0];
+      }
       if (sender) {
-        sender.replaceTrack(newTrack);
+        try {
+          await sender.replaceTrack(newTrack);
+        } catch {
+          // If replaceTrack fails, remove and re-add (triggers renegotiation)
+          try {
+            entry.pc.removeTrack(sender);
+            entry.pc.addTrack(newTrack, newStream);
+          } catch { /* PC may be closed */ }
+        }
       }
     }
 

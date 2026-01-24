@@ -446,7 +446,7 @@ function RoomPageContent() {
       localStream.getTracks().forEach(t => t.stop());
       const newStream = await initializeLocalStream(selectedInputId || undefined);
       if (newStream) {
-        replaceLocalStream(newStream);
+        await replaceLocalStream(newStream);
       }
     })();
   }, [selectedInputId, localStream, initializeLocalStream, replaceLocalStream]);
