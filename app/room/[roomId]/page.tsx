@@ -9,7 +9,12 @@ import { PusherSignalingClient } from '@/lib/pusher-client';
 import { audioContextManager } from '@/lib/audio-context-manager';
 import styles from './room.module.css';
 
-type PeerState = 'alone' | 'handshaking' | 'paired';
+interface PeerInfo {
+  userId: string;
+  nickname: string;
+  isReady: boolean;
+  connectionState: WebRTCState;
+}
 
 function RoomPageContent() {
   const params = useParams();
@@ -30,11 +35,10 @@ function RoomPageContent() {
   const isValidRoomId = /^[A-Z0-9]{6}$/.test(roomId);
 
   // ─── State ───
-  const [remoteNickname, setRemoteNickname] = useState<string>('');
+  const [peers, setPeers] = useState<Map<string, PeerInfo>>(new Map());
+  const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isReady, setIsReady] = useState(false);
-  const [remoteReady, setRemoteReady] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [battleStarted, setBattleStarted] = useState(false);
   const [beatAudio, setBeatAudio] = useState<HTMLAudioElement | null>(null);
@@ -42,8 +46,6 @@ function RoomPageContent() {
   const [websocketConnected, setWebsocketConnected] = useState(false);
   const [isBeatPlaying, setIsBeatPlaying] = useState(false);
   const [isMicMuted, setIsMicMuted] = useState(false);
-  const [peerState, setPeerState] = useState<PeerState>('alone');
-  const [connectionState, setConnectionState] = useState<WebRTCState>('idle');
 
   // ─── Refs ───
   const userIdRef = useRef(`user-${Date.now()}-${Math.random()}`);
@@ -53,10 +55,10 @@ function RoomPageContent() {
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownStartedRef = useRef(false);
   const beatAudioRef = useRef<HTMLAudioElement | null>(null);
-  const remoteUserIdRef = useRef<string>('');
-  // Callback refs for signaling handler (avoid useEffect churn)
-  const startConnectionRef = useRef<(isInitiator: boolean) => Promise<void>>();
-  const resetStateRef = useRef<() => void>();
+  // Callback refs for signaling handler
+  const startConnectionRef = useRef<(remoteUserId: string, isInitiator: boolean) => Promise<void>>();
+  const closeConnectionRef = useRef<(remoteUserId: string) => void>();
+  const resetAllRef = useRef<() => void>();
   const initializeLocalStreamRef = useRef<() => Promise<MediaStream | null>>();
   const startBattleRef = useRef<(ts: number) => Promise<void>>();
   const playBeatRef = useRef<() => Promise<boolean>>();
@@ -148,7 +150,8 @@ function RoomPageContent() {
   const {
     localStream: webrtcLocalStream,
     startConnection,
-    resetState,
+    closeConnection,
+    resetAll,
     handleSignalingMessage,
     initializeLocalStream,
   } = useWebRTC({
@@ -157,11 +160,21 @@ function RoomPageContent() {
     sendSignalingMessage: (message) => {
       signalingRef.current?.send(message);
     },
-    onRemoteStream: (stream) => {
-      setRemoteStream(stream);
+    onRemoteStream: (userId, stream) => {
+      setRemoteStreams(prev => {
+        const next = new Map(prev);
+        if (stream) next.set(userId, stream);
+        else next.delete(userId);
+        return next;
+      });
     },
-    onConnectionStateChange: (state) => {
-      setConnectionState(state);
+    onPeerConnectionState: (userId, state) => {
+      setPeers(prev => {
+        const next = new Map(prev);
+        const peer = next.get(userId);
+        if (peer) next.set(userId, { ...peer, connectionState: state });
+        return next;
+      });
     },
   });
 
@@ -186,13 +199,14 @@ function RoomPageContent() {
     remoteAudioActive,
   } = useAudioControls({
     localStream,
-    remoteStream,
+    remoteStreams,
     beatAudio,
   });
 
   // ─── Keep callback refs in sync ───
   useEffect(() => { startConnectionRef.current = startConnection; }, [startConnection]);
-  useEffect(() => { resetStateRef.current = resetState; }, [resetState]);
+  useEffect(() => { closeConnectionRef.current = closeConnection; }, [closeConnection]);
+  useEffect(() => { resetAllRef.current = resetAll; }, [resetAll]);
   useEffect(() => { initializeLocalStreamRef.current = initializeLocalStream; }, [initializeLocalStream]);
   useEffect(() => { startBattleRef.current = startBattle; }, [startBattle]);
   useEffect(() => { playBeatRef.current = playBeat; }, [playBeat]);
@@ -222,13 +236,22 @@ function RoomPageContent() {
           return;
         }
 
-        // ─── Handshake state machine ───
+        // ─── Handshake state machine (multi-peer) ───
         switch (message.type) {
           case 'peer-hello': {
-            const { userId: remoteId, nickname: remoteNick, sessionId } = message;
-            setRemoteNickname(remoteNick);
-            remoteUserIdRef.current = remoteId;
-            setPeerState('handshaking');
+            const { userId: remoteId, nickname: remoteNick } = message;
+
+            // Add peer to our map
+            setPeers(prev => {
+              const next = new Map(prev);
+              next.set(remoteId, {
+                userId: remoteId,
+                nickname: remoteNick,
+                isReady: false,
+                connectionState: 'idle',
+              });
+              return next;
+            });
 
             // Send ack back (include our nickname so peer learns it)
             signalingRef.current?.send({
@@ -236,52 +259,68 @@ function RoomPageContent() {
               userId: userIdRef.current,
               targetUserId: remoteId,
               nickname,
-              sessionId,
+              sessionId: message.sessionId,
             });
 
             // Determine initiator and start connection
             const weInitiate = userIdRef.current < remoteId;
-            startConnectionRef.current?.(weInitiate);
-            setPeerState('paired');
+            startConnectionRef.current?.(remoteId, weInitiate);
             break;
           }
 
           case 'peer-hello-ack': {
             const { userId: remoteId, nickname: remoteNick } = message;
-            setRemoteNickname(remoteNick);
-            if (!remoteUserIdRef.current) {
-              remoteUserIdRef.current = remoteId;
-            }
-            setPeerState('paired');
+
+            // Add peer to our map
+            setPeers(prev => {
+              const next = new Map(prev);
+              if (!next.has(remoteId)) {
+                next.set(remoteId, {
+                  userId: remoteId,
+                  nickname: remoteNick,
+                  isReady: false,
+                  connectionState: 'idle',
+                });
+              }
+              return next;
+            });
 
             const weInitiate = userIdRef.current < remoteId;
-            startConnectionRef.current?.(weInitiate);
+            startConnectionRef.current?.(remoteId, weInitiate);
             break;
           }
 
           case 'webrtc-renegotiate': {
-            resetStateRef.current?.();
             const remoteId = message.userId;
+            // Close existing connection to this peer and restart
+            closeConnectionRef.current?.(remoteId);
             const weInitiate = userIdRef.current < remoteId;
-            startConnectionRef.current?.(weInitiate);
+            startConnectionRef.current?.(remoteId, weInitiate);
             break;
           }
 
           case 'peer-disconnected': {
-            setPeerState('alone');
-            setRemoteNickname('');
-            setRemoteReady(false);
-            remoteUserIdRef.current = '';
-            resetStateRef.current?.();
-            setRemoteStream(null);
+            const remoteId = message.userId;
+            // Remove peer from map
+            setPeers(prev => {
+              const next = new Map(prev);
+              next.delete(remoteId);
+              return next;
+            });
+            // Remove their stream
+            setRemoteStreams(prev => {
+              const next = new Map(prev);
+              next.delete(remoteId);
+              return next;
+            });
+            // Close WebRTC connection
+            closeConnectionRef.current?.(remoteId);
             break;
           }
 
           // ─── Legacy user-joined (backwards compat) ───
           case 'user-joined': {
             if (message.userId !== userIdRef.current) {
-              setRemoteNickname(message.nickname);
-
               if (isHostRef.current && signalingRef.current) {
                 signalingRef.current.send({
                   type: 'beat-selected',
@@ -295,7 +334,12 @@ function RoomPageContent() {
           // ─── Game events ───
           case 'ready':
             if (message.userId !== userIdRef.current) {
-              setRemoteReady(true);
+              setPeers(prev => {
+                const next = new Map(prev);
+                const peer = next.get(message.userId);
+                if (peer) next.set(message.userId, { ...peer, isReady: true });
+                return next;
+              });
             }
             break;
 
@@ -360,14 +404,16 @@ function RoomPageContent() {
     };
   }, [roomId, nickname]);
 
-  // ─── Remote stream -> muted audio element (Safari WebRTC keep-alive) ───
+  // ─── Remote streams -> muted audio element (Safari WebRTC keep-alive) ───
   useEffect(() => {
-    if (remoteStream && remoteAudioRef.current) {
-      if (remoteAudioRef.current.srcObject !== remoteStream) {
-        remoteAudioRef.current.srcObject = remoteStream;
+    if (remoteStreams.size > 0 && remoteAudioRef.current) {
+      // Use the first stream for Safari keep-alive workaround
+      const firstStream = remoteStreams.values().next().value;
+      if (firstStream && remoteAudioRef.current.srcObject !== firstStream) {
+        remoteAudioRef.current.srcObject = firstStream;
       }
     }
-  }, [remoteStream]);
+  }, [remoteStreams]);
 
   // ─── Handle Ready ───
   const handleReady = useCallback(async () => {
@@ -446,9 +492,18 @@ function RoomPageContent() {
     };
   }, [selectedBeat]);
 
+  // ─── Derived state ───
+  const hasPeers = peers.size > 0;
+  const allPeersConnected = hasPeers && Array.from(peers.values()).every(p => p.connectionState === 'connected');
+  const allPeersReady = hasPeers && Array.from(peers.values()).every(p => p.isReady);
+  const somePeerConnecting = Array.from(peers.values()).some(p =>
+    p.connectionState === 'connecting' || p.connectionState === 'reconnecting'
+  );
+  const somePeerFailed = Array.from(peers.values()).some(p => p.connectionState === 'failed');
+
   // ─── Countdown Logic ───
   useEffect(() => {
-    if ((battleStarted || !isReady || !remoteReady) && countdownIntervalRef.current) {
+    if ((battleStarted || !isReady || !allPeersReady) && countdownIntervalRef.current) {
       clearInterval(countdownIntervalRef.current);
       countdownIntervalRef.current = null;
       countdownStartedRef.current = false;
@@ -456,7 +511,7 @@ function RoomPageContent() {
       return;
     }
 
-    if (isReady && remoteReady && !battleStarted && !countdownStartedRef.current) {
+    if (isReady && allPeersReady && !battleStarted && !countdownStartedRef.current) {
       countdownStartedRef.current = true;
       let count = 3;
       setCountdown(count);
@@ -485,11 +540,7 @@ function RoomPageContent() {
         }
       }, 1000);
     }
-  }, [isReady, remoteReady, battleStarted, isHost, startBattle]);
-
-  // ─── Derived state ───
-  const isConnected = connectionState === 'connected';
-  const hasPeer = peerState !== 'alone' || !!remoteNickname;
+  }, [isReady, allPeersReady, battleStarted, isHost, startBattle]);
 
   if (!nickname) {
     return <div className={styles.container}>Cargando...</div>;
@@ -523,15 +574,17 @@ function RoomPageContent() {
             <span className={styles.playerName}>{nickname}</span>
             {isReady && <span className={styles.readyBadge}>&#10003; Listo</span>}
           </div>
-          {remoteNickname ? (
-            <div className={styles.player}>
-              <span className={styles.playerLabel}>Oponente:</span>
-              <span className={styles.playerName}>{remoteNickname}</span>
-              {remoteReady && <span className={styles.readyBadge}>&#10003; Listo</span>}
+          {Array.from(peers.values()).map(peer => (
+            <div key={peer.userId} className={styles.player}>
+              <span className={styles.playerLabel}>Rival:</span>
+              <span className={styles.playerName}>{peer.nickname}</span>
+              {peer.isReady && <span className={styles.readyBadge}>&#10003; Listo</span>}
+              {peer.connectionState === 'connected' && <span className={styles.connectedBadge}>&#128266;</span>}
             </div>
-          ) : (
+          ))}
+          {peers.size === 0 && (
             <div className={styles.player}>
-              <span className={styles.waiting}>Esperando rival...</span>
+              <span className={styles.waiting}>Esperando rivales...</span>
             </div>
           )}
         </div>
@@ -543,10 +596,10 @@ function RoomPageContent() {
             <p className={styles.statusText}>Conectando al servidor...</p>
           </div>
         )}
-        {websocketConnected && !hasPeer && (
-          <p className={styles.statusText}>Esperando que se una otro jugador...</p>
+        {websocketConnected && !hasPeers && (
+          <p className={styles.statusText}>Esperando que se unan otros jugadores...</p>
         )}
-        {websocketConnected && hasPeer && !isConnected && connectionState !== 'failed' && (
+        {websocketConnected && hasPeers && somePeerConnecting && !somePeerFailed && (
           <div>
             <p className={styles.statusText}>Estableciendo conexion de audio...</p>
             {!localStream && (
@@ -561,24 +614,21 @@ function RoomPageContent() {
             )}
           </div>
         )}
-        {connectionState === 'failed' && (
+        {somePeerFailed && (
           <p className={styles.statusText} style={{ color: '#f5576c' }}>
-            Error de conexion. Recarga la pagina para reintentar.
+            Error de conexion con un rival. Recarga la pagina para reintentar.
           </p>
         )}
-        {connectionState === 'reconnecting' && (
-          <p className={styles.statusText}>Reconectando...</p>
-        )}
-        {isConnected && remoteNickname && !isReady && !remoteReady && (
+        {allPeersConnected && !isReady && !allPeersReady && (
           <p className={styles.statusText}>Presiona &quot;Estoy listo&quot; cuando estes preparado</p>
         )}
-        {isReady && !remoteReady && (
-          <p className={styles.statusText}>Esperando que el oponente este listo...</p>
+        {isReady && !allPeersReady && (
+          <p className={styles.statusText}>Esperando que todos esten listos...</p>
         )}
-        {isReady && remoteReady && countdown !== null && countdown > 0 && !battleStarted && (
+        {isReady && allPeersReady && countdown !== null && countdown > 0 && !battleStarted && (
           <div className={styles.countdown}>{countdown}</div>
         )}
-        {isReady && remoteReady && countdown === 0 && !battleStarted && (
+        {isReady && allPeersReady && countdown === 0 && !battleStarted && (
           <div className={styles.countdown} style={{ color: '#f5576c', fontSize: '4rem' }}>GO!</div>
         )}
         {battleStarted && (
@@ -610,7 +660,7 @@ function RoomPageContent() {
         </div>
       )}
 
-      {!battleStarted && websocketConnected && isConnected && remoteNickname && !isReady && (
+      {!battleStarted && websocketConnected && allPeersConnected && hasPeers && !isReady && (
         <button onClick={handleReady} className={styles.readyButton}>
           Estoy listo
         </button>
@@ -682,7 +732,7 @@ function RoomPageContent() {
 
         <div className={styles.controlGroup}>
           <label className={styles.controlLabel}>
-            Volumen Oponente: {Math.round(remoteVolume * 100)}%
+            Volumen Rivales: {Math.round(remoteVolume * 100)}%
           </label>
           <input
             type="range"

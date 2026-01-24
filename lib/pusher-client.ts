@@ -59,8 +59,10 @@ export class PusherSignalingClient {
       // ─── Bind message handlers BEFORE subscription completes ───
 
       // Server-triggered signaling (WebRTC + handshake)
-      this.channel.bind('server-signaling', (data: SignalingMessage) => {
+      this.channel.bind('server-signaling', (data: SignalingMessage & { targetUserId?: string }) => {
         if (data.userId && data.userId === this.userId) return;
+        // Skip messages not targeted to us (directed offer/answer/ice-candidate)
+        if (data.targetUserId && data.targetUserId !== this.userId) return;
         this.onMessage(data);
       });
 

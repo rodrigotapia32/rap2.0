@@ -55,6 +55,11 @@
   font-weight: 600;
 }
 
+.connectedBadge {
+  font-size: 1rem;
+  margin-left: 0.25rem;
+}
+
 .waiting {
   color: #888;
   font-style: italic;

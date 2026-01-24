@@ -1,7 +1,7 @@
 /**
- * Hook for managing WebRTC peer connections.
- * Handles offer/answer, ICE candidates, progressive constraint fallback,
- * session tracking, and automatic reconnection.
+ * Hook for managing WebRTC peer connections in a multi-peer mesh.
+ * Each remote peer gets its own RTCPeerConnection. The local audio stream
+ * is shared across all connections.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -21,12 +21,21 @@ const CONSTRAINT_LEVELS: MediaStreamConstraints[] = [
 
 export type WebRTCState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed';
 
+interface PeerConnectionEntry {
+  pc: RTCPeerConnection;
+  sessionId: string;
+  isInitiator: boolean;
+  reconnectAttempts: number;
+  pendingIceCandidates: { candidate: RTCIceCandidateInit; timestamp: number }[];
+  disconnectedTimer: ReturnType<typeof setTimeout> | null;
+}
+
 interface UseWebRTCOptions {
   roomId: string;
   userId: string;
   sendSignalingMessage?: (message: SignalingMessage) => void;
-  onRemoteStream?: (stream: MediaStream) => void;
-  onConnectionStateChange?: (state: WebRTCState) => void;
+  onRemoteStream?: (userId: string, stream: MediaStream | null) => void;
+  onPeerConnectionState?: (userId: string, state: WebRTCState) => void;
 }
 
 export function useWebRTC({
@@ -34,34 +43,23 @@ export function useWebRTC({
   userId,
   sendSignalingMessage,
   onRemoteStream,
-  onConnectionStateChange,
+  onPeerConnectionState,
 }: UseWebRTCOptions) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [webrtcState, setWebrtcState] = useState<WebRTCState>('idle');
 
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const peersRef = useRef<Map<string, PeerConnectionEntry>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
   const sendMessageRef = useRef(sendSignalingMessage);
-  const sessionIdRef = useRef<string>(generateSessionId());
-  const isInitiatorRef = useRef(false);
-  const reconnectAttemptsRef = useRef(0);
-  const pendingIceCandidatesRef = useRef<{ candidate: RTCIceCandidateInit; timestamp: number }[]>([]);
-  const disconnectedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
   const onRemoteStreamRef = useRef(onRemoteStream);
-  const onConnectionStateChangeRef = useRef(onConnectionStateChange);
+  const onPeerConnectionStateRef = useRef(onPeerConnectionState);
   const rtcConfigRef = useRef<RTCConfiguration | null>(null);
-  const triggerReconnectRef = useRef<() => void>();
+  const startConnectionInternalRef = useRef<(remoteUserId: string, isInitiator: boolean, sessionId?: string) => Promise<void>>();
 
   // Keep refs in sync
   useEffect(() => { sendMessageRef.current = sendSignalingMessage; }, [sendSignalingMessage]);
   useEffect(() => { onRemoteStreamRef.current = onRemoteStream; }, [onRemoteStream]);
-  useEffect(() => { onConnectionStateChangeRef.current = onConnectionStateChange; }, [onConnectionStateChange]);
-
-  const updateState = useCallback((state: WebRTCState) => {
-    setWebrtcState(state);
-    onConnectionStateChangeRef.current?.(state);
-  }, []);
+  useEffect(() => { onPeerConnectionStateRef.current = onPeerConnectionState; }, [onPeerConnectionState]);
 
   /**
    * Fetch TURN credentials from server-side endpoint
@@ -109,12 +107,10 @@ export function useWebRTC({
         return stream;
       } catch (err: unknown) {
         const error = err as DOMException;
-        // If permission denied or no device, don't try lower constraints
         if (error.name === 'NotAllowedError' || error.name === 'NotFoundError') {
           console.warn('Microphone unavailable:', error.name);
           return null;
         }
-        // Otherwise try next constraint level
         if (i === CONSTRAINT_LEVELS.length - 1) {
           console.warn('All audio constraint levels failed:', error.message);
           return null;
@@ -125,121 +121,192 @@ export function useWebRTC({
   }, []);
 
   /**
-   * Creates a fresh RTCPeerConnection, always closing any existing one first.
+   * Flush pending ICE candidates for a specific peer
    */
-  const createFreshPeerConnection = useCallback(async (): Promise<RTCPeerConnection> => {
-    // Tear down existing connection
-    if (peerConnectionRef.current) {
+  const flushPendingCandidates = useCallback(async (entry: PeerConnectionEntry) => {
+    const now = Date.now();
+    const valid = entry.pendingIceCandidates.filter(
+      e => now - e.timestamp < ICE_CANDIDATE_TIMEOUT_MS
+    );
+    entry.pendingIceCandidates = [];
+
+    for (const { candidate } of valid) {
       try {
-        peerConnectionRef.current.ontrack = null;
-        peerConnectionRef.current.onicecandidate = null;
-        peerConnectionRef.current.onconnectionstatechange = null;
-        peerConnectionRef.current.oniceconnectionstatechange = null;
-        peerConnectionRef.current.close();
+        await entry.pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch {
+        // Discard invalid candidates
+      }
+    }
+  }, []);
+
+  /**
+   * Close and clean up a single peer's connection
+   */
+  const closeConnection = useCallback((remoteUserId: string) => {
+    const entry = peersRef.current.get(remoteUserId);
+    if (!entry) return;
+
+    if (entry.disconnectedTimer) {
+      clearTimeout(entry.disconnectedTimer);
+    }
+
+    try {
+      entry.pc.ontrack = null;
+      entry.pc.onicecandidate = null;
+      entry.pc.onconnectionstatechange = null;
+      entry.pc.oniceconnectionstatechange = null;
+      entry.pc.close();
+    } catch { /* already closed */ }
+
+    peersRef.current.delete(remoteUserId);
+    onRemoteStreamRef.current?.(remoteUserId, null);
+    onPeerConnectionStateRef.current?.(remoteUserId, 'idle');
+  }, []);
+
+  /**
+   * Close all peer connections (room leave)
+   */
+  const resetAll = useCallback(() => {
+    for (const [remoteUserId] of peersRef.current) {
+      closeConnection(remoteUserId);
+    }
+    peersRef.current.clear();
+  }, [closeConnection]);
+
+  /**
+   * Trigger reconnection for a specific peer
+   */
+  const triggerReconnect = useCallback((remoteUserId: string) => {
+    const entry = peersRef.current.get(remoteUserId);
+    if (!entry) return;
+
+    if (entry.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      onPeerConnectionStateRef.current?.(remoteUserId, 'failed');
+      return;
+    }
+
+    entry.reconnectAttempts++;
+    onPeerConnectionStateRef.current?.(remoteUserId, 'reconnecting');
+
+    // Generate new session ID for this peer
+    entry.sessionId = generateSessionId();
+
+    // Notify peer we want to renegotiate
+    sendMessageRef.current?.({
+      type: 'webrtc-renegotiate',
+      userId,
+      sessionId: entry.sessionId,
+    });
+
+    // Re-create the connection (initiator role stays the same)
+    startConnectionInternalRef.current?.(remoteUserId, entry.isInitiator, entry.sessionId);
+  }, [userId]);
+
+  /**
+   * Internal: create a peer connection for a specific remote user
+   */
+  const startConnectionInternal = useCallback(async (
+    remoteUserId: string,
+    isInitiator: boolean,
+    sessionId?: string
+  ) => {
+    if (!mountedRef.current) return;
+
+    // Close existing connection to this peer if any
+    const existing = peersRef.current.get(remoteUserId);
+    if (existing) {
+      if (existing.disconnectedTimer) clearTimeout(existing.disconnectedTimer);
+      try {
+        existing.pc.ontrack = null;
+        existing.pc.onicecandidate = null;
+        existing.pc.onconnectionstatechange = null;
+        existing.pc.oniceconnectionstatechange = null;
+        existing.pc.close();
       } catch { /* already closed */ }
-      peerConnectionRef.current = null;
     }
 
-    // Clear pending ICE candidates
-    pendingIceCandidatesRef.current = [];
+    onPeerConnectionStateRef.current?.(remoteUserId, 'connecting');
 
-    // Clear disconnected timer
-    if (disconnectedTimerRef.current) {
-      clearTimeout(disconnectedTimerRef.current);
-      disconnectedTimerRef.current = null;
-    }
+    // Ensure local stream
+    const stream = await initializeLocalStream();
 
     const config = await fetchRtcConfig();
     const pc = new RTCPeerConnection(config);
-    peerConnectionRef.current = pc;
+
+    const peerSessionId = sessionId || generateSessionId();
+    const entry: PeerConnectionEntry = {
+      pc,
+      sessionId: peerSessionId,
+      isInitiator,
+      reconnectAttempts: existing?.reconnectAttempts ?? 0,
+      pendingIceCandidates: [],
+      disconnectedTimer: null,
+    };
+    peersRef.current.set(remoteUserId, entry);
+
+    if (!mountedRef.current) {
+      pc.close();
+      peersRef.current.delete(remoteUserId);
+      return;
+    }
 
     // Handle remote track
     pc.ontrack = (event) => {
-      const stream = event.streams[0] ?? new MediaStream([event.track]);
-
-      // Monitor track lifecycle
-      const track = event.track;
-      track.onended = () => {
-        console.warn('Remote track ended');
-      };
-      track.onmute = () => {
-        console.warn('Remote track muted');
-      };
-      track.onunmute = () => {
-        console.log('Remote track unmuted');
-      };
-
-      onRemoteStreamRef.current?.(stream);
+      const remoteStream = event.streams[0] ?? new MediaStream([event.track]);
+      onRemoteStreamRef.current?.(remoteUserId, remoteStream);
     };
 
     // Handle connection state
     pc.onconnectionstatechange = () => {
-      if (pc !== peerConnectionRef.current) return; // stale PC
+      const currentEntry = peersRef.current.get(remoteUserId);
+      if (!currentEntry || currentEntry.pc !== pc) return; // stale PC
+
       const state = pc.connectionState;
 
       if (state === 'connected') {
-        reconnectAttemptsRef.current = 0;
-        if (disconnectedTimerRef.current) {
-          clearTimeout(disconnectedTimerRef.current);
-          disconnectedTimerRef.current = null;
+        currentEntry.reconnectAttempts = 0;
+        if (currentEntry.disconnectedTimer) {
+          clearTimeout(currentEntry.disconnectedTimer);
+          currentEntry.disconnectedTimer = null;
         }
-        updateState('connected');
+        onPeerConnectionStateRef.current?.(remoteUserId, 'connected');
       } else if (state === 'disconnected') {
-        // Wait before reconnecting - transient network issues
-        if (!disconnectedTimerRef.current) {
-          disconnectedTimerRef.current = setTimeout(() => {
-            disconnectedTimerRef.current = null;
-            if (peerConnectionRef.current?.connectionState === 'disconnected') {
-              triggerReconnectRef.current?.();
+        if (!currentEntry.disconnectedTimer) {
+          currentEntry.disconnectedTimer = setTimeout(() => {
+            currentEntry.disconnectedTimer = null;
+            const stillEntry = peersRef.current.get(remoteUserId);
+            if (stillEntry?.pc?.connectionState === 'disconnected') {
+              triggerReconnect(remoteUserId);
             }
           }, DISCONNECTED_TIMEOUT_MS);
         }
       } else if (state === 'failed') {
-        // Immediate reconnect on failure
-        triggerReconnectRef.current?.();
+        triggerReconnect(remoteUserId);
       }
     };
 
     // Handle ICE connection state
     pc.oniceconnectionstatechange = () => {
-      if (pc !== peerConnectionRef.current) return;
+      const currentEntry = peersRef.current.get(remoteUserId);
+      if (!currentEntry || currentEntry.pc !== pc) return;
       if (pc.iceConnectionState === 'failed') {
         pc.restartIce();
       }
     };
 
-    // Handle ICE candidates
+    // Handle ICE candidates - directed to specific peer
     pc.onicecandidate = (event) => {
       if (event.candidate && sendMessageRef.current) {
         sendMessageRef.current({
           type: 'ice-candidate',
           candidate: event.candidate,
-          sessionId: sessionIdRef.current,
+          sessionId: peerSessionId,
+          targetUserId: remoteUserId,
         });
       }
     };
 
-    return pc;
-  }, [fetchRtcConfig, updateState]);
-
-  /**
-   * Start the WebRTC connection as initiator or responder.
-   * Sequential: await stream -> create PC -> add tracks -> offer/answer
-   */
-  const startConnection = useCallback(async (isInitiator: boolean) => {
-    if (!mountedRef.current) return;
-
-    isInitiatorRef.current = isInitiator;
-    updateState('connecting');
-
-    // 1. Ensure we have a local stream (non-blocking for listen-only)
-    const stream = await initializeLocalStream();
-
-    // 2. Create fresh peer connection
-    const pc = await createFreshPeerConnection();
-    if (!mountedRef.current) return;
-
-    // 3. Add local tracks if available
+    // Add local tracks
     if (stream) {
       const audioTracks = stream.getAudioTracks();
       for (const track of audioTracks) {
@@ -248,7 +315,7 @@ export function useWebRTC({
       }
     }
 
-    // 4. If initiator, create and send offer
+    // If initiator, create and send offer
     if (isInitiator) {
       try {
         const offer = await pc.createOffer({
@@ -259,81 +326,107 @@ export function useWebRTC({
         sendMessageRef.current?.({
           type: 'offer',
           offer,
-          sessionId: sessionIdRef.current,
+          sessionId: peerSessionId,
+          targetUserId: remoteUserId,
         });
       } catch (err) {
-        console.error('Error creating offer:', err);
-        updateState('failed');
+        console.error(`Error creating offer for ${remoteUserId}:`, err);
+        onPeerConnectionStateRef.current?.(remoteUserId, 'failed');
       }
     }
-    // If responder, we wait for the offer to arrive via handleSignalingMessage
-  }, [initializeLocalStream, createFreshPeerConnection, updateState]);
+  }, [initializeLocalStream, fetchRtcConfig, triggerReconnect]);
+
+  // Keep ref in sync to break circular dependency with triggerReconnect
+  useEffect(() => { startConnectionInternalRef.current = startConnectionInternal; }, [startConnectionInternal]);
 
   /**
-   * Trigger a reconnection attempt
+   * Start a connection to a specific remote peer
    */
-  const triggerReconnect = useCallback(() => {
-    if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
-      updateState('failed');
-      return;
-    }
-
-    reconnectAttemptsRef.current++;
-    updateState('reconnecting');
-
-    // Generate new session ID
-    sessionIdRef.current = generateSessionId();
-
-    // Notify peer we want to renegotiate
-    sendMessageRef.current?.({
-      type: 'webrtc-renegotiate',
-      userId,
-      sessionId: sessionIdRef.current,
-    });
-
-    // Re-run startConnection with same role
-    startConnection(isInitiatorRef.current);
-  }, [userId, startConnection, updateState]);
-
-  // Keep triggerReconnect ref in sync (used by createFreshPeerConnection callbacks)
-  useEffect(() => { triggerReconnectRef.current = triggerReconnect; }, [triggerReconnect]);
+  const startConnection = useCallback(async (remoteUserId: string, isInitiator: boolean) => {
+    await startConnectionInternal(remoteUserId, isInitiator);
+  }, [startConnectionInternal]);
 
   /**
-   * Flush pending ICE candidates that haven't expired
-   */
-  const flushPendingCandidates = useCallback(async (pc: RTCPeerConnection) => {
-    const now = Date.now();
-    const valid = pendingIceCandidatesRef.current.filter(
-      entry => now - entry.timestamp < ICE_CANDIDATE_TIMEOUT_MS
-    );
-    pendingIceCandidatesRef.current = [];
-
-    for (const { candidate } of valid) {
-      try {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch {
-        // Discard invalid candidates
-      }
-    }
-  }, []);
-
-  /**
-   * Handle incoming signaling messages
+   * Handle incoming signaling messages (routed by userId)
    */
   const handleSignalingMessage = useCallback(async (message: SignalingMessage) => {
+    const fromUserId = message.userId;
+    if (!fromUserId) return;
+
     switch (message.type) {
       case 'offer': {
-        // If we receive an offer with a different sessionId and we have an active connection,
-        // it means the peer reconnected - accept it
-        if (message.sessionId && message.sessionId !== sessionIdRef.current) {
-          sessionIdRef.current = message.sessionId;
+        let entry = peersRef.current.get(fromUserId);
+
+        // Accept new session from this peer
+        if (message.sessionId && entry && message.sessionId !== entry.sessionId) {
+          entry.sessionId = message.sessionId;
         }
 
-        let pc = peerConnectionRef.current;
-        if (!pc || pc.signalingState === 'closed') {
-          // Ensure we have stream first
+        if (!entry || entry.pc.signalingState === 'closed') {
+          // Create a new connection for this peer as responder
           await initializeLocalStream();
-          pc = await createFreshPeerConnection();
+          const config = await fetchRtcConfig();
+          const pc = new RTCPeerConnection(config);
+
+          const peerSessionId = message.sessionId || generateSessionId();
+          entry = {
+            pc,
+            sessionId: peerSessionId,
+            isInitiator: false,
+            reconnectAttempts: 0,
+            pendingIceCandidates: [],
+            disconnectedTimer: null,
+          };
+          peersRef.current.set(fromUserId, entry);
+
+          // Wire up handlers
+          pc.ontrack = (event) => {
+            const remoteStream = event.streams[0] ?? new MediaStream([event.track]);
+            onRemoteStreamRef.current?.(fromUserId, remoteStream);
+          };
+
+          pc.onconnectionstatechange = () => {
+            const currentEntry = peersRef.current.get(fromUserId);
+            if (!currentEntry || currentEntry.pc !== pc) return;
+            const state = pc.connectionState;
+            if (state === 'connected') {
+              currentEntry.reconnectAttempts = 0;
+              if (currentEntry.disconnectedTimer) {
+                clearTimeout(currentEntry.disconnectedTimer);
+                currentEntry.disconnectedTimer = null;
+              }
+              onPeerConnectionStateRef.current?.(fromUserId, 'connected');
+            } else if (state === 'disconnected') {
+              if (!currentEntry.disconnectedTimer) {
+                currentEntry.disconnectedTimer = setTimeout(() => {
+                  currentEntry.disconnectedTimer = null;
+                  const stillEntry = peersRef.current.get(fromUserId);
+                  if (stillEntry?.pc?.connectionState === 'disconnected') {
+                    triggerReconnect(fromUserId);
+                  }
+                }, DISCONNECTED_TIMEOUT_MS);
+              }
+            } else if (state === 'failed') {
+              triggerReconnect(fromUserId);
+            }
+          };
+
+          pc.oniceconnectionstatechange = () => {
+            const currentEntry = peersRef.current.get(fromUserId);
+            if (!currentEntry || currentEntry.pc !== pc) return;
+            if (pc.iceConnectionState === 'failed') pc.restartIce();
+          };
+
+          pc.onicecandidate = (event) => {
+            if (event.candidate && sendMessageRef.current) {
+              sendMessageRef.current({
+                type: 'ice-candidate',
+                candidate: event.candidate,
+                sessionId: entry!.sessionId,
+                targetUserId: fromUserId,
+              });
+            }
+          };
 
           // Add local tracks
           if (localStreamRef.current) {
@@ -343,54 +436,52 @@ export function useWebRTC({
               pc.addTrack(track, localStreamRef.current);
             }
           }
+
+          onPeerConnectionStateRef.current?.(fromUserId, 'connecting');
         }
 
         try {
-          await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
+          await entry.pc.setRemoteDescription(new RTCSessionDescription(message.offer));
+          await flushPendingCandidates(entry);
 
-          // Process pending ICE candidates
-          await flushPendingCandidates(pc);
-
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
+          const answer = await entry.pc.createAnswer();
+          await entry.pc.setLocalDescription(answer);
 
           sendMessageRef.current?.({
             type: 'answer',
             answer,
-            sessionId: sessionIdRef.current,
+            sessionId: entry.sessionId,
+            targetUserId: fromUserId,
           });
         } catch (err: unknown) {
           const error = err as DOMException;
-          console.error('Error handling offer:', error);
+          console.error(`Error handling offer from ${fromUserId}:`, error);
           if (error.name === 'InvalidStateError') {
-            // PC in bad state, recreate on next attempt
-            peerConnectionRef.current?.close();
-            peerConnectionRef.current = null;
+            closeConnection(fromUserId);
           }
         }
         break;
       }
 
       case 'answer': {
-        const pc = peerConnectionRef.current;
-        if (!pc) return;
+        const entry = peersRef.current.get(fromUserId);
+        if (!entry) return;
 
         try {
-          await pc.setRemoteDescription(new RTCSessionDescription(message.answer));
-          await flushPendingCandidates(pc);
+          await entry.pc.setRemoteDescription(new RTCSessionDescription(message.answer));
+          await flushPendingCandidates(entry);
         } catch (err) {
-          console.error('Error handling answer:', err);
+          console.error(`Error handling answer from ${fromUserId}:`, err);
         }
         break;
       }
 
       case 'ice-candidate': {
-        const pc = peerConnectionRef.current;
-        if (!pc) return;
+        const entry = peersRef.current.get(fromUserId);
+        if (!entry) return;
 
-        // If remote description is not set yet, queue the candidate
-        if (!pc.remoteDescription) {
-          pendingIceCandidatesRef.current.push({
+        if (!entry.pc.remoteDescription) {
+          entry.pendingIceCandidates.push({
             candidate: message.candidate,
             timestamp: Date.now(),
           });
@@ -398,11 +489,11 @@ export function useWebRTC({
         }
 
         try {
-          await pc.addIceCandidate(new RTCIceCandidate(message.candidate));
+          await entry.pc.addIceCandidate(new RTCIceCandidate(message.candidate));
         } catch (err: unknown) {
           const error = err as DOMException;
           if (error.name === 'InvalidStateError') {
-            pendingIceCandidatesRef.current.push({
+            entry.pendingIceCandidates.push({
               candidate: message.candidate,
               timestamp: Date.now(),
             });
@@ -411,46 +502,31 @@ export function useWebRTC({
         break;
       }
     }
-  }, [initializeLocalStream, createFreshPeerConnection, flushPendingCandidates]);
+  }, [initializeLocalStream, fetchRtcConfig, flushPendingCandidates, closeConnection, triggerReconnect]);
 
   /**
-   * Reset all WebRTC state (for reconnection)
+   * Get the connection state for a specific peer
    */
-  const resetState = useCallback(() => {
-    if (disconnectedTimerRef.current) {
-      clearTimeout(disconnectedTimerRef.current);
-      disconnectedTimerRef.current = null;
-    }
-
-    if (peerConnectionRef.current) {
-      try {
-        peerConnectionRef.current.ontrack = null;
-        peerConnectionRef.current.onicecandidate = null;
-        peerConnectionRef.current.onconnectionstatechange = null;
-        peerConnectionRef.current.oniceconnectionstatechange = null;
-        peerConnectionRef.current.close();
-      } catch { /* already closed */ }
-      peerConnectionRef.current = null;
-    }
-
-    pendingIceCandidatesRef.current = [];
-    sessionIdRef.current = generateSessionId();
-    reconnectAttemptsRef.current = 0;
-    updateState('idle');
-  }, [updateState]);
+  const getPeerState = useCallback((remoteUserId: string): WebRTCState => {
+    const entry = peersRef.current.get(remoteUserId);
+    if (!entry) return 'idle';
+    const state = entry.pc.connectionState;
+    if (state === 'connected') return 'connected';
+    if (state === 'connecting' || state === 'new') return 'connecting';
+    if (state === 'failed' || state === 'closed') return 'failed';
+    return 'connecting';
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      if (disconnectedTimerRef.current) {
-        clearTimeout(disconnectedTimerRef.current);
+      for (const [, entry] of peersRef.current) {
+        if (entry.disconnectedTimer) clearTimeout(entry.disconnectedTimer);
+        try { entry.pc.close(); } catch { /* noop */ }
       }
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
-      }
+      peersRef.current.clear();
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(t => t.stop());
         localStreamRef.current = null;
@@ -460,11 +536,12 @@ export function useWebRTC({
 
   return {
     localStream,
-    webrtcState,
     startConnection,
-    resetState,
+    closeConnection,
+    resetAll,
     handleSignalingMessage,
     initializeLocalStream,
+    getPeerState,
   };
 }
 
