@@ -47,6 +47,7 @@ function RoomPageContent() {
   const countdownStartedRef = useRef(false); // Ref para rastrear si el countdown ya se inició
   const audioContextRef = useRef<AudioContext | null>(null); // Ref para el AudioContext compartido
   const audioUnlockedRef = useRef(false); // Ref para rastrear si el audio está desbloqueado
+  const beatAudioRef = useRef<HTMLAudioElement | null>(null); // Ref para acceder al beat actual
 
   /**
    * Activa el AudioContext y desbloquea el audio en móvil
@@ -94,12 +95,15 @@ function RoomPageContent() {
           source.stop(0.001);
           
           // También intentar reproducir el beat muy brevemente
-          const originalVolume = beatAudio.volume;
-          beatAudio.volume = 0.01; // Muy bajo pero no 0
-          await beatAudio.play();
-          beatAudio.pause();
-          beatAudio.currentTime = 0;
-          beatAudio.volume = originalVolume;
+          const audio = beatAudioRef.current || beatAudio;
+          if (audio) {
+            const originalVolume = audio.volume;
+            audio.volume = 0.01; // Muy bajo pero no 0
+            await audio.play();
+            audio.pause();
+            audio.currentTime = 0;
+            audio.volume = originalVolume;
+          }
           
           audioUnlockedRef.current = true;
           console.log('✅ Audio desbloqueado para móvil');
@@ -122,7 +126,8 @@ function RoomPageContent() {
    * Reproduce el beat (usado internamente y por eventos remotos)
    */
   const playBeat = async (): Promise<boolean> => {
-    if (!beatAudio) {
+    const audio = beatAudioRef.current || beatAudio;
+    if (!audio) {
       return false;
     }
 
@@ -132,7 +137,7 @@ function RoomPageContent() {
         await audioContextRef.current.resume();
       }
 
-      const playPromise = beatAudio.play();
+      const playPromise = audio.play();
       if (playPromise !== undefined) {
         await playPromise;
         setIsBeatPlaying(true);
@@ -145,7 +150,7 @@ function RoomPageContent() {
       if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
         try {
           await audioContextRef.current.resume();
-          await beatAudio.play();
+          await audio.play();
           setIsBeatPlaying(true);
           return true;
         } catch (e: any) {
@@ -160,8 +165,9 @@ function RoomPageContent() {
    * Pausa el beat (usado internamente y por eventos remotos)
    */
   const pauseBeat = () => {
-    if (beatAudio) {
-      beatAudio.pause();
+    const audio = beatAudioRef.current || beatAudio;
+    if (audio) {
+      audio.pause();
       setIsBeatPlaying(false);
     }
   };
@@ -170,8 +176,9 @@ function RoomPageContent() {
    * Reinicia el beat (usado internamente y por eventos remotos)
    */
   const restartBeatInternal = async () => {
-    if (beatAudio) {
-      beatAudio.currentTime = 0;
+    const audio = beatAudioRef.current || beatAudio;
+    if (audio) {
+      audio.currentTime = 0;
       if (!isBeatPlaying) {
         await playBeat();
       }
@@ -193,8 +200,9 @@ function RoomPageContent() {
     const delay = Math.max(0, serverTimestamp - now);
 
     setTimeout(async () => {
-      if (beatAudio) {
-        beatAudio.currentTime = 0;
+      const audio = beatAudioRef.current || beatAudio;
+      if (audio) {
+        audio.currentTime = 0;
         const success = await playBeat();
         
         // Si es host y el beat se reprodujo correctamente, enviar evento al guest
@@ -220,7 +228,8 @@ function RoomPageContent() {
    * Pausa o reanuda el beat (solo host puede controlar)
    */
   const toggleBeat = async () => {
-    if (!isHost || !beatAudio) return;
+    const audio = beatAudioRef.current || beatAudio;
+    if (!isHost || !audio) return;
 
     if (isBeatPlaying) {
       pauseBeat();
@@ -247,7 +256,8 @@ function RoomPageContent() {
    * Reinicia el beat desde el principio (solo host puede controlar)
    */
   const restartBeat = async () => {
-    if (!isHost || !beatAudio) return;
+    const audio = beatAudioRef.current || beatAudio;
+    if (!isHost || !audio) return;
 
     await restartBeatInternal();
     // Enviar evento de reinicio al guest
@@ -340,15 +350,15 @@ function RoomPageContent() {
             if (!isHost) {
               // Esperar a que el beat esté cargado si aún no lo está
               const tryPlayBeat = async () => {
-                // Esperar hasta que el beat esté cargado (máximo 2 segundos)
+                // Esperar hasta que el beat esté cargado (máximo 3 segundos)
                 let attempts = 0;
-                const maxAttempts = 20; // 20 intentos * 100ms = 2 segundos
-                while (!beatAudio && attempts < maxAttempts) {
+                const maxAttempts = 30; // 30 intentos * 100ms = 3 segundos
+                while ((!beatAudioRef.current || beatAudioRef.current.readyState < 2) && attempts < maxAttempts) {
                   await new Promise(resolve => setTimeout(resolve, 100));
                   attempts++;
                 }
                 
-                if (beatAudio) {
+                if (beatAudioRef.current && beatAudioRef.current.readyState >= 2) {
                   // Desbloquear audio primero (importante en móvil)
                   unlockAudio().then(() => {
                     playBeat();
@@ -357,7 +367,18 @@ function RoomPageContent() {
                     playBeat();
                   });
                 } else {
-                  console.error('❌ Beat no está cargado después de esperar');
+                  console.error('❌ Beat no está cargado después de esperar. readyState:', beatAudioRef.current?.readyState);
+                  // Intentar cargar el beat manualmente si no está listo
+                  if (beatAudioRef.current) {
+                    beatAudioRef.current.load();
+                    // Esperar un poco más y reintentar
+                    setTimeout(async () => {
+                      if (beatAudioRef.current) {
+                        await unlockAudio();
+                        playBeat();
+                      }
+                    }, 500);
+                  }
                 }
               };
               
@@ -494,7 +515,12 @@ function RoomPageContent() {
     audio.setAttribute('playsinline', 'true');
     audio.setAttribute('preload', 'auto');
     audio.crossOrigin = 'anonymous';
+    
+    // Cargar el audio antes de establecerlo
+    audio.load();
+    
     setBeatAudio(audio);
+    beatAudioRef.current = audio; // Actualizar ref también
     setIsBeatPlaying(false);
 
     // Escuchar eventos de pausa/reproducción para mantener el estado sincronizado
@@ -514,6 +540,9 @@ function RoomPageContent() {
       audio.removeEventListener('error', handleError);
       audio.pause();
       audio.src = '';
+      if (beatAudioRef.current === audio) {
+        beatAudioRef.current = null;
+      }
     };
   }, [selectedBeat]);
 
