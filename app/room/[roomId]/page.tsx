@@ -320,10 +320,11 @@ function RoomPageContent() {
             break;
           case 'user-joined':
             if (message.userId !== userIdRef.current) {
+              console.log('🔵 [user-joined] Estableciendo remoteNickname:', message.nickname, 'isHost:', isHost);
               setRemoteNickname(message.nickname);
               // Si es host, enviar el beat seleccionado y iniciar WebRTC (solo una vez)
               if (isHost && signalingRef.current && !webrtcStartedRef.current) {
-                console.log('🔵 Host: Iniciando WebRTC...');
+                console.log('🔵 [user-joined] Host detectó guest, iniciando WebRTC...');
                 webrtcStartedRef.current = true;
                 setTimeout(() => {
                   if (signalingRef.current) {
@@ -335,9 +336,10 @@ function RoomPageContent() {
                 }, 500);
                 setTimeout(() => {
                   if (startWebRTC) {
+                    console.log('🔵 [user-joined] Llamando startWebRTC...');
                     startWebRTC();
                   } else {
-                    console.warn('⚠️ startWebRTC no está disponible');
+                    console.warn('⚠️ [user-joined] startWebRTC no está disponible');
                     webrtcStartedRef.current = false;
                   }
                 }, 1000);
@@ -395,7 +397,33 @@ function RoomPageContent() {
     return () => {
       signaling.disconnect();
     };
-  }, [roomId, nickname, isHost, selectedBeat]);
+  }, [roomId, nickname, isHost, selectedBeat, startWebRTC]);
+
+  // Si el host entra después del guest, el guest ya envió su user-joined
+  // Necesitamos verificar si ya hay un remoteNickname y iniciar WebRTC
+  useEffect(() => {
+    if (isHost && remoteNickname && !webrtcStartedRef.current && signalingRef.current && startWebRTC) {
+      console.log('🔵 [useEffect] Host detectó guest existente (remoteNickname:', remoteNickname, '), iniciando WebRTC...');
+      webrtcStartedRef.current = true;
+      setTimeout(() => {
+        if (signalingRef.current) {
+          signalingRef.current.send({
+            type: 'beat-selected',
+            beatNumber: selectedBeat,
+          });
+        }
+      }, 500);
+      setTimeout(() => {
+        if (startWebRTC) {
+          console.log('🔵 [useEffect] Llamando startWebRTC...');
+          startWebRTC();
+        } else {
+          console.warn('⚠️ [useEffect] startWebRTC no está disponible');
+          webrtcStartedRef.current = false;
+        }
+      }, 1000);
+    }
+  }, [isHost, remoteNickname, selectedBeat, startWebRTC]);
 
   // Inicializar WebRTC
   const { localStream: webrtcLocalStream, isConnected, handleSignalingMessage, startWebRTC } = useWebRTC({
