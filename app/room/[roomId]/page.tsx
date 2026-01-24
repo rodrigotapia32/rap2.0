@@ -603,31 +603,6 @@ function RoomPageContent() {
     setLocalStream(webrtcLocalStream);
   }, [webrtcLocalStream]);
 
-
-  // Conectar stream remoto a elemento audio HTML como respaldo
-  useEffect(() => {
-    if (remoteStream && remoteAudioRef.current) {
-      console.log('🎵 Conectando stream remoto a elemento audio HTML');
-      remoteAudioRef.current.srcObject = remoteStream;
-      remoteAudioRef.current.autoplay = true;
-      remoteAudioRef.current.setAttribute('playsinline', 'true');
-      remoteAudioRef.current.volume = remoteVolume;
-      
-      // Intentar reproducir
-      remoteAudioRef.current.play().catch((error) => {
-        console.warn('⚠️ No se pudo reproducir audio HTML automáticamente:', error);
-      });
-      
-      console.log('✅ Stream remoto conectado a elemento audio HTML');
-    }
-    
-    return () => {
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = null;
-      }
-    };
-  }, [remoteStream, remoteVolume]);
-
   // El audio remoto se reproduce a través del AudioContext en useAudioControls
   // Solo verificamos que el stream esté disponible y desbloqueamos audio
   useEffect(() => {
