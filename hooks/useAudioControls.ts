@@ -188,17 +188,32 @@ export function useAudioControls({
             remoteGainNodeRef.current!.connect(audioContextRef.current!.destination);
           }
 
-          // Asegurarse de que el remoteGainNode esté conectado al destination
+          // Asegurarse de que el remoteGainNode esté conectado al destination ANTES de conectar el source
           if (remoteGainNodeRef.current!.numberOfOutputs === 0) {
             console.warn('⚠️ remoteGainNode no está conectado, reconectando...');
             remoteGainNodeRef.current!.disconnect();
             remoteGainNodeRef.current!.connect(audioContextRef.current!.destination);
+            console.log('✅ remoteGainNode reconectado al destination');
+          }
+
+          // Verificar nuevamente que esté conectado
+          if (remoteGainNodeRef.current!.numberOfOutputs === 0) {
+            console.error('❌ remoteGainNode aún no está conectado después de intentar reconectar');
+            return;
           }
 
           const source = audioContextRef.current!.createMediaStreamSource(remoteStream);
           source.connect(remoteGainNodeRef.current!);
           remoteSourceRef.current = source;
           console.log('✅ Stream remoto conectado al AudioContext, reproduciendo audio');
+          
+          // Verificar inmediatamente que la conexión esté establecida
+          console.log('🔍 Verificación inmediata de conexión:', {
+            sourceOutputs: source.numberOfOutputs,
+            gainNodeOutputs: remoteGainNodeRef.current!.numberOfOutputs,
+            gainNodeConnected: remoteGainNodeRef.current!.numberOfOutputs > 0,
+            audioContextState: audioContextRef.current!.state,
+          });
           
           // Verificar que el nodo de ganancia esté conectado correctamente
           console.log('🔊 Estado del nodo de ganancia remoto:', {
