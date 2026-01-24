@@ -341,6 +341,15 @@ export function useWebRTC({
       if (!peerConnectionRef.current) {
         createPeerConnection();
         peerConnectionCreated = true;
+        
+        // Asegurarse de que el stream local se agregue después de crear la conexión
+        if (stream && peerConnectionRef.current) {
+          stream.getTracks().forEach((track) => {
+            if (peerConnectionRef.current) {
+              peerConnectionRef.current.addTrack(track, stream);
+            }
+          });
+        }
       }
 
       // 3. Si es host, crear offer cuando el remoto esté listo
