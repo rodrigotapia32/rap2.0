@@ -95,12 +95,21 @@ export function useWebRTC({
   /**
    * Initialize local stream with progressive constraint fallback
    */
-  const initializeLocalStream = useCallback(async (): Promise<MediaStream | null> => {
-    if (localStreamRef.current) return localStreamRef.current;
+  const initializeLocalStream = useCallback(async (deviceId?: string): Promise<MediaStream | null> => {
+    if (localStreamRef.current && !deviceId &&
+        localStreamRef.current.getAudioTracks().some(t => t.readyState === 'live')) {
+      return localStreamRef.current;
+    }
 
     for (let i = 0; i < CONSTRAINT_LEVELS.length; i++) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia(CONSTRAINT_LEVELS[i]);
+        const constraints = structuredClone(CONSTRAINT_LEVELS[i]);
+        if (deviceId && typeof constraints.audio === 'object') {
+          (constraints.audio as MediaTrackConstraints).deviceId = { exact: deviceId };
+        } else if (deviceId) {
+          constraints.audio = { deviceId: { exact: deviceId } };
+        }
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         stream.getAudioTracks().forEach(track => { track.enabled = true; });
         localStreamRef.current = stream;
         setLocalStream(stream);
@@ -111,13 +120,37 @@ export function useWebRTC({
           console.warn('Microphone unavailable:', error.name);
           return null;
         }
+        if (error.name === 'OverconstrainedError' && deviceId) {
+          // Device not available, fall back without deviceId constraint
+          break;
+        }
         if (i === CONSTRAINT_LEVELS.length - 1) {
           console.warn('All audio constraint levels failed:', error.message);
           return null;
         }
       }
     }
+    // If deviceId caused OverconstrainedError, retry without it
+    if (deviceId) return initializeLocalStream();
     return null;
+  }, []);
+
+  /**
+   * Replace the audio track in all active peer connections (no renegotiation)
+   */
+  const replaceLocalStream = useCallback((newStream: MediaStream) => {
+    const newTrack = newStream.getAudioTracks()[0];
+    if (!newTrack) return;
+
+    for (const [, entry] of peersRef.current) {
+      const sender = entry.pc.getSenders().find(s => s.track?.kind === 'audio');
+      if (sender) {
+        sender.replaceTrack(newTrack);
+      }
+    }
+
+    localStreamRef.current = newStream;
+    setLocalStream(newStream);
   }, []);
 
   /**
@@ -541,6 +574,7 @@ export function useWebRTC({
     resetAll,
     handleSignalingMessage,
     initializeLocalStream,
+    replaceLocalStream,
     getPeerState,
   };
 }

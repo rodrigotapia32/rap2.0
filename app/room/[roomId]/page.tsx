@@ -4,6 +4,7 @@ import { useSearchParams, useParams } from 'next/navigation';
 import { useEffect, useState, useRef, Suspense, useCallback } from 'react';
 import { useWebRTC, WebRTCState } from '@/hooks/useWebRTC';
 import { useAudioControls } from '@/hooks/useAudioControls';
+import { useDeviceSelection } from '@/hooks/useDeviceSelection';
 import { SignalingMessage } from '@/lib/websocket';
 import { PusherSignalingClient } from '@/lib/pusher-client';
 import { audioContextManager } from '@/lib/audio-context-manager';
@@ -59,7 +60,7 @@ function RoomPageContent() {
   const startConnectionRef = useRef<(remoteUserId: string, isInitiator: boolean) => Promise<void>>();
   const closeConnectionRef = useRef<(remoteUserId: string) => void>();
   const resetAllRef = useRef<() => void>();
-  const initializeLocalStreamRef = useRef<() => Promise<MediaStream | null>>();
+  const initializeLocalStreamRef = useRef<(deviceId?: string) => Promise<MediaStream | null>>();
   const startBattleRef = useRef<(ts: number) => Promise<void>>();
   const playBeatRef = useRef<() => Promise<boolean>>();
   const pauseBeatRef = useRef<() => void>();
@@ -67,6 +68,18 @@ function RoomPageContent() {
   const isHostRef = useRef(isHost);
   const selectedBeatRef = useRef(selectedBeat);
   const isMobileRef = useRef(isMobile);
+
+  // ─── Device Selection ───
+  const {
+    audioInputs,
+    audioOutputs,
+    selectedInputId,
+    selectedOutputId,
+    setSelectedInputId,
+    setSelectedOutputId,
+  } = useDeviceSelection();
+
+  const selectedInputIdRef = useRef(selectedInputId);
 
   // ─── Beat Playback Helpers ───
   const playBeat = useCallback(async (): Promise<boolean> => {
@@ -154,6 +167,7 @@ function RoomPageContent() {
     resetAll,
     handleSignalingMessage,
     initializeLocalStream,
+    replaceLocalStream,
   } = useWebRTC({
     roomId,
     userId: userIdRef.current,
@@ -177,6 +191,8 @@ function RoomPageContent() {
       });
     },
   });
+
+  const replaceLocalStreamRef = useRef(replaceLocalStream);
 
   // Keep webrtc message handler ref in sync
   useEffect(() => {
@@ -215,6 +231,8 @@ function RoomPageContent() {
   useEffect(() => { isHostRef.current = isHost; }, [isHost]);
   useEffect(() => { selectedBeatRef.current = selectedBeat; }, [selectedBeat]);
   useEffect(() => { isMobileRef.current = isMobile; }, [isMobile]);
+  useEffect(() => { selectedInputIdRef.current = selectedInputId; }, [selectedInputId]);
+  useEffect(() => { replaceLocalStreamRef.current = replaceLocalStream; }, [replaceLocalStream]);
 
   // ─── Signaling Setup (only re-runs on roomId/nickname change) ───
   useEffect(() => {
@@ -397,7 +415,7 @@ function RoomPageContent() {
     signaling.connect();
 
     // Initialize local stream early (parallel with signaling)
-    initializeLocalStreamRef.current?.();
+    initializeLocalStreamRef.current?.(selectedInputIdRef.current || undefined);
 
     return () => {
       signaling.disconnect();
@@ -414,6 +432,38 @@ function RoomPageContent() {
       }
     }
   }, [remoteStreams]);
+
+  // ─── Mid-session mic device change ───
+  const prevInputIdRef = useRef(selectedInputId);
+  useEffect(() => {
+    if (prevInputIdRef.current === selectedInputId) return;
+    prevInputIdRef.current = selectedInputId;
+
+    if (!localStream) return;
+
+    (async () => {
+      // Stop existing tracks
+      localStream.getTracks().forEach(t => t.stop());
+      const newStream = await initializeLocalStream(selectedInputId || undefined);
+      if (newStream) {
+        replaceLocalStream(newStream);
+      }
+    })();
+  }, [selectedInputId, localStream, initializeLocalStream, replaceLocalStream]);
+
+  // ─── Speaker output device change ───
+  useEffect(() => {
+    const setSink = async (el: HTMLAudioElement | null) => {
+      if (!el) return;
+      if (typeof (el as any).setSinkId === 'function') {
+        try {
+          await (el as any).setSinkId(selectedOutputId);
+        } catch { /* browser may not support setSinkId */ }
+      }
+    };
+    setSink(remoteAudioRef.current);
+    setSink(beatAudioRef.current);
+  }, [selectedOutputId, beatAudio]);
 
   // ─── Handle Ready ───
   const handleReady = useCallback(async () => {
@@ -745,6 +795,42 @@ function RoomPageContent() {
             className={styles.slider}
           />
         </div>
+
+        {audioInputs.length > 0 && (
+          <div className={styles.controlGroup}>
+            <label className={styles.controlLabel}>Microfono:</label>
+            <select
+              className={styles.deviceSelect}
+              value={selectedInputId}
+              onChange={(e) => setSelectedInputId(e.target.value)}
+            >
+              <option value="">Por defecto del sistema</option>
+              {audioInputs.map(d => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || `Microfono ${d.deviceId.slice(0, 8)}`}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {audioOutputs.length > 0 && (
+          <div className={styles.controlGroup}>
+            <label className={styles.controlLabel}>Altavoz:</label>
+            <select
+              className={styles.deviceSelect}
+              value={selectedOutputId}
+              onChange={(e) => setSelectedOutputId(e.target.value)}
+            >
+              <option value="">Por defecto del sistema</option>
+              {audioOutputs.map(d => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || `Altavoz ${d.deviceId.slice(0, 8)}`}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Muted audio element - Safari WebRTC keep-alive only, audio routed via Web Audio API */}
