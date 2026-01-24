@@ -193,6 +193,13 @@ export function useWebRTC({
     }
 
     try {
+      // Asegurarse de que el stream local esté agregado antes de crear la oferta
+      if (localStreamRef.current && pc.getSenders().length === 0) {
+        localStreamRef.current.getTracks().forEach((track) => {
+          pc.addTrack(track, localStreamRef.current!);
+        });
+      }
+      
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: false,
@@ -231,6 +238,13 @@ export function useWebRTC({
     }
 
     try {
+      // Asegurarse de que el stream local esté agregado antes de crear la respuesta
+      if (localStreamRef.current && pc.getSenders().length === 0) {
+        localStreamRef.current.getTracks().forEach((track) => {
+          pc.addTrack(track, localStreamRef.current!);
+        });
+      }
+      
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);

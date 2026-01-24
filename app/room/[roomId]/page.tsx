@@ -284,16 +284,19 @@ function RoomPageContent() {
    * Maneja el click en "Estoy listo"
    */
   const handleReady = async () => {
-    setIsReady(true);
-    
-    // Desbloquear audio en móvil cuando el usuario interactúa
-    await unlockAudio();
-    
-    if (signalingRef.current) {
-      signalingRef.current.send({
-        type: 'ready',
-        userId: userIdRef.current,
-      });
+    // Solo establecer como listo si aún no lo está
+    if (!isReady) {
+      setIsReady(true);
+      
+      // Desbloquear audio en móvil cuando el usuario interactúa
+      await unlockAudio();
+      
+      if (signalingRef.current) {
+        signalingRef.current.send({
+          type: 'ready',
+          userId: userIdRef.current,
+        });
+      }
     }
   };
 
