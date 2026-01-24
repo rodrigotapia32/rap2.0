@@ -5,6 +5,8 @@ import { useEffect, useState, useRef, Suspense, useCallback } from 'react';
 import { useWebRTC, WebRTCState } from '@/hooks/useWebRTC';
 import { useAudioControls } from '@/hooks/useAudioControls';
 import { useDeviceSelection } from '@/hooks/useDeviceSelection';
+import { useBeatAnalysis } from '@/hooks/useBeatAnalysis';
+import BeatVisualizer from '@/components/BeatVisualizer';
 import { SignalingMessage } from '@/lib/websocket';
 import { PusherSignalingClient } from '@/lib/pusher-client';
 import { audioContextManager } from '@/lib/audio-context-manager';
@@ -56,6 +58,8 @@ function RoomPageContent() {
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownStartedRef = useRef(false);
   const beatAudioRef = useRef<HTMLAudioElement | null>(null);
+  const beatGainNodeRef = useRef<GainNode | null>(null);
+  const beatSourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
   // Callback refs for signaling handler
   const startConnectionRef = useRef<(remoteUserId: string, isInitiator: boolean) => Promise<void>>();
   const closeConnectionRef = useRef<(remoteUserId: string) => void>();
@@ -80,6 +84,14 @@ function RoomPageContent() {
   } = useDeviceSelection();
 
   const selectedInputIdRef = useRef(selectedInputId);
+
+  // ─── Beat Analysis ───
+  const {
+    analysisResult,
+    spectrogramColumns,
+    totalColumns,
+    isAnalyzing,
+  } = useBeatAnalysis({ beatUrl: `/beats/beat${selectedBeat}.mp3` });
 
   // ─── Beat Playback Helpers ───
   const playBeat = useCallback(async (): Promise<boolean> => {
@@ -511,11 +523,10 @@ function RoomPageContent() {
     });
   }, [isHost]);
 
-  // ─── Load Beat Audio ───
+  // ─── Load Beat Audio (routed through Web Audio API) ───
   useEffect(() => {
     const audio = new Audio(`/beats/beat${selectedBeat}.mp3`);
     audio.loop = true;
-    audio.volume = 0.5;
     audio.setAttribute('playsinline', 'true');
     audio.setAttribute('preload', 'auto');
     audio.crossOrigin = 'anonymous';
@@ -531,16 +542,60 @@ function RoomPageContent() {
     audio.addEventListener('play', handlePlay);
     audio.addEventListener('pause', handlePause);
 
+    // Route through Web Audio API: MediaElementSource → GainNode → destination
+    let audioCtx: AudioContext | null = null;
+    let sourceNode: MediaElementAudioSourceNode | null = null;
+    let gainNode: GainNode | null = null;
+
+    const setupWebAudio = () => {
+      try {
+        audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        sourceNode = audioCtx.createMediaElementSource(audio);
+        gainNode = audioCtx.createGain();
+        gainNode.gain.value = 0.5;
+        sourceNode.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        beatGainNodeRef.current = gainNode;
+        beatSourceNodeRef.current = sourceNode;
+      } catch {
+        // Fallback: direct volume control if Web Audio fails
+        audio.volume = 0.5;
+      }
+    };
+
+    // Setup after element is ready
+    if (audio.readyState >= 1) {
+      setupWebAudio();
+    } else {
+      audio.addEventListener('loadedmetadata', setupWebAudio, { once: true });
+    }
+
     return () => {
       audio.removeEventListener('play', handlePlay);
       audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('loadedmetadata', setupWebAudio);
       audio.pause();
       audio.src = '';
       if (beatAudioRef.current === audio) {
         beatAudioRef.current = null;
       }
+      beatGainNodeRef.current = null;
+      beatSourceNodeRef.current = null;
+      if (audioCtx && audioCtx.state !== 'closed') {
+        audioCtx.close();
+      }
     };
   }, [selectedBeat]);
+
+  // ─── Beat Volume Sync (via GainNode) ───
+  useEffect(() => {
+    if (beatGainNodeRef.current) {
+      beatGainNodeRef.current.gain.value = beatVolume;
+    } else if (beatAudio) {
+      // Fallback if Web Audio not available
+      beatAudio.volume = beatVolume;
+    }
+  }, [beatVolume, beatAudio]);
 
   // ─── Derived state ───
   const hasPeers = peers.size > 0;
@@ -747,6 +802,15 @@ function RoomPageContent() {
           </div>
         </div>
       )}
+
+      <BeatVisualizer
+        spectrogramColumns={spectrogramColumns}
+        totalColumns={totalColumns}
+        analysisResult={analysisResult}
+        isAnalyzing={isAnalyzing}
+        beatAudio={beatAudio}
+        isBeatPlaying={isBeatPlaying}
+      />
 
       <div className={styles.controls}>
         <div className={styles.controlGroup}>

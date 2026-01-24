@@ -128,14 +128,8 @@ export function useAudioControls({
     };
   }, [reconnectAllStreams]);
 
-  /**
-   * Beat volume control (direct HTMLAudioElement volume)
-   */
-  useEffect(() => {
-    if (beatAudio) {
-      beatAudio.volume = beatVolume;
-    }
-  }, [beatAudio, beatVolume]);
+  // Beat volume is controlled via GainNode in page.tsx (Web Audio API routing).
+  // Do NOT set beatAudio.volume here — it's multiplicative with the GainNode.
 
   /**
    * Mic volume control
