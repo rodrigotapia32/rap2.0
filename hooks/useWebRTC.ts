@@ -348,6 +348,21 @@ export function useWebRTC({
       console.log('📤 Oferta creada:', {
         type: offer.type,
         sdp: offer.sdp?.substring(0, 100) + '...',
+        senders: pc.getSenders().length,
+        receivers: pc.getReceivers().length,
+      });
+      
+      // Verificar que los senders tengan tracks
+      const senders = pc.getSenders();
+      senders.forEach((sender, index) => {
+        if (sender.track) {
+          console.log(`📤 Sender ${index} en oferta:`, {
+            kind: sender.track.kind,
+            enabled: sender.track.enabled,
+            muted: sender.track.muted,
+            readyState: sender.track.readyState,
+          });
+        }
       });
       
       await pc.setLocalDescription(offer);
@@ -424,8 +439,26 @@ export function useWebRTC({
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       console.log('✅ Guest estableció descripción remota');
       
+      // Verificar receivers después de establecer descripción remota
+      const receivers = pc.getReceivers();
+      console.log('📥 Receivers después de establecer descripción remota:', receivers.length);
+      receivers.forEach((receiver, index) => {
+        if (receiver.track) {
+          console.log(`📥 Receiver ${index}:`, {
+            kind: receiver.track.kind,
+            enabled: receiver.track.enabled,
+            muted: receiver.track.muted,
+            readyState: receiver.track.readyState,
+          });
+        }
+      });
+      
       const answer = await pc.createAnswer();
-      console.log('📤 Guest creó respuesta');
+      console.log('📤 Guest creó respuesta:', {
+        type: answer.type,
+        senders: pc.getSenders().length,
+        receivers: pc.getReceivers().length,
+      });
       
       await pc.setLocalDescription(answer);
       console.log('✅ Guest estableció descripción local');
@@ -458,7 +491,23 @@ export function useWebRTC({
     }
 
     try {
+      console.log('📥 Host recibió respuesta del guest');
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      console.log('✅ Host estableció descripción remota');
+      
+      // Verificar receivers después de establecer descripción remota
+      const receivers = pc.getReceivers();
+      console.log('📥 Receivers después de establecer descripción remota (host):', receivers.length);
+      receivers.forEach((receiver, index) => {
+        if (receiver.track) {
+          console.log(`📥 Receiver ${index} (host):`, {
+            kind: receiver.track.kind,
+            enabled: receiver.track.enabled,
+            muted: receiver.track.muted,
+            readyState: receiver.track.readyState,
+          });
+        }
+      });
     } catch (error) {
       console.error('❌ Error manejando answer:', error);
     }
