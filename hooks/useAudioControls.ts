@@ -245,14 +245,11 @@ export function useAudioControls({
             console.log('✅ AudioContext activado después de conectar stream remoto');
           }
 
-          // Crear AnalyserNode para verificar que hay datos de audio fluyendo
+          // Crear AnalyserNode para verificar que hay datos de audio fluyendo (solo para diagnóstico)
           const analyser = audioContextRef.current!.createAnalyser();
           analyser.fftSize = 256;
-          const analyserGain = audioContextRef.current!.createGain();
-          analyserGain.gain.value = 1.0;
-          remoteGainNodeRef.current!.connect(analyserGain);
-          analyserGain.connect(analyser);
-          analyser.connect(audioContextRef.current!.destination);
+          // Conectar el analyser en paralelo al remoteGainNode (no interfiere con la reproducción)
+          remoteGainNodeRef.current!.connect(analyser);
           
           // Verificar que hay datos de audio después de un momento
           setTimeout(() => {
@@ -263,7 +260,7 @@ export function useAudioControls({
               const avgAmplitude = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
               
               console.log('🔍 Verificación después de conectar:', {
-                sourceOutputs: remoteSourceRef.current.numberOfOutputs,
+                sourceOutputs: remoteSourceRef.current?.numberOfOutputs || 0,
                 gainNodeOutputs: remoteGainNodeRef.current.numberOfOutputs,
                 audioContextState: audioContextRef.current!.state,
                 maxAmplitude: maxAmplitude,
@@ -273,9 +270,12 @@ export function useAudioControls({
               
               if (maxAmplitude === 0) {
                 console.warn('⚠️ No se detectan datos de audio en el stream remoto');
-                console.warn('💡 Esto podría indicar que el micrófono del oponente no está transmitiendo datos');
+                console.warn('💡 Esto podría indicar que:');
+                console.warn('   1. El micrófono del oponente no está transmitiendo datos');
+                console.warn('   2. El oponente no está hablando');
+                console.warn('   3. Hay un problema con la transmisión WebRTC');
               } else {
-                console.log('✅ Se detectan datos de audio en el stream remoto');
+                console.log('✅ Se detectan datos de audio en el stream remoto (amplitud:', maxAmplitude, ')');
               }
             }
           }, 1000);
