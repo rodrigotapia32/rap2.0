@@ -451,6 +451,17 @@ export function useWebRTC({
       // Continuar incluso si no hay stream (modo solo escucha)
       if (!mounted) return;
 
+      // Verificar que el stream local esté disponible antes de continuar
+      if (!stream) {
+        console.warn('⚠️ No se pudo obtener stream local, continuando en modo solo escucha');
+      } else {
+        console.log('✅ Stream local obtenido:', {
+          id: stream.id,
+          active: stream.active,
+          tracks: stream.getAudioTracks().length,
+        });
+      }
+
       // 2. Crear conexión peer solo si no existe
       if (!peerConnectionRef.current) {
         createPeerConnection();
@@ -460,11 +471,13 @@ export function useWebRTC({
         if (stream && peerConnectionRef.current) {
           const audioTracks = stream.getAudioTracks();
           if (audioTracks.length > 0) {
+            console.log('📤 Agregando tracks locales después de crear peer connection');
             audioTracks.forEach((track) => {
               // Asegurarse de que el track esté habilitado
               track.enabled = true;
               if (peerConnectionRef.current) {
                 peerConnectionRef.current.addTrack(track, stream);
+                console.log('✅ Track local agregado después de crear peer connection');
               }
             });
           }
@@ -475,11 +488,26 @@ export function useWebRTC({
       if (isHost && sendMessageRef.current) {
         if (waitForRemote) {
           // Esperar a que el remoto esté conectado (se llama desde fuera cuando remoteNickname está listo)
+          console.log('⏳ Host esperando a que el remoto se conecte antes de crear oferta');
           // La oferta se creará desde el componente padre cuando detecte al remoto
         } else {
           // Fallback: esperar un delay si waitForRemote no está habilitado
+          // Pero asegurarse de que el stream local esté disponible
           setTimeout(() => {
-            if (mounted && peerConnectionRef.current) {
+            if (mounted && peerConnectionRef.current && sendMessageRef.current) {
+              // Verificar que el stream local esté disponible antes de crear la oferta
+              if (!localStreamRef.current) {
+                console.warn('⚠️ Host: Stream local no disponible, reintentando...');
+                // Reintentar después de un momento
+                setTimeout(() => {
+                  if (mounted && peerConnectionRef.current && sendMessageRef.current && localStreamRef.current) {
+                    createOffer();
+                  } else {
+                    console.error('❌ Host: No se pudo obtener stream local después de reintentar');
+                  }
+                }, 1000);
+                return;
+              }
               createOffer();
             }
           }, 2000);
