@@ -23,19 +23,11 @@ export class PusherSignalingClient {
     onMessage: (message: SignalingMessage) => void,
     onConnectionChange?: (connected: boolean) => void
   ) {
-    console.log('🏗️ PusherSignalingClient: Constructor llamado', {
-      roomId,
-      userId,
-      nickname,
-      hasOnMessage: !!onMessage,
-      hasOnConnectionChange: !!onConnectionChange,
-    });
     this.roomId = roomId;
     this.userId = userId;
     this.nickname = nickname;
     this.onMessage = onMessage;
     this.onConnectionChange = onConnectionChange;
-    console.log('✅ PusherSignalingClient: Constructor completado');
   }
 
   /**
@@ -79,13 +71,11 @@ export class PusherSignalingClient {
         },
       });
 
-      console.log('✅ Pusher: Instancia creada, suscribiendo al canal...');
 
       // Suscribirse al canal de la sala (usando private channel para client events)
       const channelName = `private-room-${this.roomId}`;
       this.channel = this.pusher.subscribe(channelName);
       
-      console.log('✅ Pusher: Suscrito al canal:', channelName);
 
       // IMPORTANTE: Hacer bindings ANTES de que se complete la suscripción
       // para no perder mensajes que lleguen temprano
@@ -121,7 +111,6 @@ export class PusherSignalingClient {
             nickname: data.nickname,
           });
         } else {
-          console.log('⚠️ Pusher: user-joined es del mismo usuario, ignorando');
         }
       });
 
@@ -190,7 +179,6 @@ export class PusherSignalingClient {
             });
           }
         } catch (error) {
-          console.error('❌ Pusher: Error al enviar user-joined, usando fallback:', error);
           // Fallback a client events
           this.trigger('user-joined', {
             userId: this.userId,
@@ -235,7 +223,6 @@ export class PusherSignalingClient {
       });
 
       this.pusher.connection.bind('disconnected', () => {
-        console.log('⚠️ Pusher: Desconectado');
         this.isConnected = false;
         if (this.onConnectionChange) {
           this.onConnectionChange(false);
@@ -243,15 +230,12 @@ export class PusherSignalingClient {
       });
       
       this.pusher.connection.bind('error', (error: any) => {
-        console.error('❌ Pusher: Error de conexión:', error);
       });
       
       this.pusher.connection.bind('state_change', (states: any) => {
-        console.log('🔄 Pusher: Cambio de estado:', states);
       });
 
       this.pusher.connection.bind('error', (err: any) => {
-        console.error('Error de conexión Pusher:', err);
         this.isConnected = false;
         if (this.onConnectionChange) {
           this.onConnectionChange(false);

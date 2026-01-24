@@ -51,19 +51,6 @@ export function useWebRTC({
    */
   const initializeLocalStream = useCallback(async () => {
     try {
-      // Verificar permisos primero (si está disponible)
-      let permissionStatus = null;
-      if (navigator.permissions && navigator.permissions.query) {
-        try {
-          permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName });
-          console.log('🎤 Estado de permisos de micrófono:', permissionStatus?.state);
-        } catch (e) {
-          // La API de permisos no está disponible en todos los navegadores
-        }
-      }
-
-      console.log('🎤 Intentando obtener stream de micrófono...');
-      
       // Intentar obtener el stream
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -74,25 +61,13 @@ export function useWebRTC({
         video: false,
       });
       
-      console.log('✅ Stream de micrófono obtenido:', {
-        id: stream.id,
-        active: stream.active,
-        tracks: stream.getAudioTracks().length,
-      });
-      
       // Asegurarse de que el stream se guarde correctamente
       localStreamRef.current = stream;
       setLocalStream(stream);
       
       // Verificar que los tracks estén habilitados
       const audioTracks = stream.getAudioTracks();
-      audioTracks.forEach((track, index) => {
-        console.log(`🎤 Track ${index}:`, {
-          enabled: track.enabled,
-          muted: track.muted,
-          readyState: track.readyState,
-          label: track.label,
-        });
+      audioTracks.forEach((track) => {
         // Asegurarse de que el track esté habilitado
         track.enabled = true;
       });
@@ -149,76 +124,36 @@ export function useWebRTC({
       if (currentState === 'closed') {
         peerConnectionRef.current.close();
       } else {
-        console.log('⚠️ Reutilizando peer connection existente:', currentState);
         return peerConnectionRef.current; // Reutilizar la conexión existente
       }
     }
     
-    console.log('🆕 Creando nueva peer connection');
     const pc = new RTCPeerConnection(rtcConfig);
     peerConnectionRef.current = pc;
 
     // Manejar stream remoto
     pc.ontrack = (event) => {
-      console.log('📡 Evento ontrack recibido:', {
-        streams: event.streams.length,
-        track: {
-          kind: event.track.kind,
-          enabled: event.track.enabled,
-          muted: event.track.muted,
-          readyState: event.track.readyState,
-          id: event.track.id,
-        },
-      });
+      console.log('📡 Stream remoto recibido (ontrack)');
       
       // Asegurarse de que hay un stream y tracks
       if (event.streams && event.streams.length > 0 && onRemoteStream) {
         const stream = event.streams[0];
-        console.log('✅ Stream remoto encontrado en evento:', {
-          id: stream.id,
-          active: stream.active,
-          tracks: stream.getTracks().length,
-          audioTracks: stream.getAudioTracks().length,
-        });
-        
-        // Verificar que el stream tenga tracks de audio
         const audioTracks = stream.getAudioTracks();
         if (audioTracks.length > 0) {
-          console.log('🎤 Tracks de audio en stream remoto:', audioTracks.map(t => ({
-            enabled: t.enabled,
-            muted: t.muted,
-            readyState: t.readyState,
-            label: t.label,
-          })));
+          console.log('✅ Stream remoto con audio recibido');
+          onRemoteStream(stream);
         }
-        
-        // Llamar al callback para que el componente pueda procesar el stream
-        onRemoteStream(stream);
-      } else if (event.track && onRemoteStream) {
-        // Si no hay stream pero hay track, crear uno nuevo
-        console.log('⚠️ No hay stream en evento, creando uno nuevo con el track');
+      } else if (event.track && event.track.kind === 'audio' && onRemoteStream) {
+        // Si no hay stream pero hay track de audio, crear uno nuevo
         const newStream = new MediaStream([event.track]);
-        console.log('✅ Stream creado desde track:', {
-          id: newStream.id,
-          active: newStream.active,
-          tracks: newStream.getTracks().length,
-        });
+        console.log('✅ Stream remoto creado desde track de audio');
         onRemoteStream(newStream);
-      } else {
-        console.warn('⚠️ Evento ontrack sin stream ni track válido', {
-          hasStreams: !!event.streams,
-          streamsLength: event.streams?.length || 0,
-          hasTrack: !!event.track,
-          hasCallback: !!onRemoteStream,
-        });
       }
     };
-
 
     // Manejar cambios de estado de conexión
     pc.onconnectionstatechange = () => {
       const state = pc.connectionState;
-      console.log('🔌 Estado de conexión WebRTC:', state);
       if (onConnectionStateChange) {
         onConnectionStateChange(state);
       }
@@ -228,27 +163,20 @@ export function useWebRTC({
       if (state === 'connected') {
         console.log('✅ Conexión WebRTC establecida');
       } else if (state === 'failed') {
-        console.error('❌ Error de conexión de audio');
+        console.error('❌ Error de conexión WebRTC');
       } else if (state === 'disconnected') {
         console.warn('⚠️ Conexión WebRTC desconectada');
-      } else if (state === 'connecting') {
-        console.log('🔄 Conectando WebRTC...');
       }
     };
 
     // Manejar cambios de ICE connection state
     pc.oniceconnectionstatechange = () => {
       const iceState = pc.iceConnectionState;
-      console.log('🧊 Estado ICE:', iceState);
       if (iceState === 'failed') {
         console.error('❌ Error ICE - reiniciando...');
         pc.restartIce();
       } else if (iceState === 'connected') {
         console.log('✅ ICE conectado');
-      } else if (iceState === 'checking') {
-        console.log('🔍 ICE verificando conexión...');
-      } else if (iceState === 'completed') {
-        console.log('✅ ICE completado');
       }
     };
 
@@ -262,24 +190,41 @@ export function useWebRTC({
       }
     };
 
-    // Agregar stream local a la conexión
-    if (localStreamRef.current) {
-      const audioTracks = localStreamRef.current.getAudioTracks();
-      if (audioTracks.length > 0) {
-        console.log('📤 Agregando tracks locales al crear peer connection:', audioTracks.length);
-        audioTracks.forEach((track) => {
-          // Asegurarse de que el track esté habilitado
-          track.enabled = true;
-          pc.addTrack(track, localStreamRef.current!);
-          console.log('✅ Track local agregado al crear peer connection:', {
-            enabled: track.enabled,
-            muted: track.muted,
-            readyState: track.readyState,
+    // Agregar stream local a la conexión si está disponible
+    // Si no está disponible ahora, se agregará cuando se obtenga el stream
+    const addLocalTracks = () => {
+      if (localStreamRef.current && pc.signalingState !== 'closed') {
+        const audioTracks = localStreamRef.current.getAudioTracks();
+        const existingSenders = pc.getSenders();
+        const hasAudioSender = existingSenders.some(sender => sender.track?.kind === 'audio');
+        
+        if (audioTracks.length > 0 && !hasAudioSender) {
+          audioTracks.forEach((track) => {
+            track.enabled = true;
+            try {
+              pc.addTrack(track, localStreamRef.current!);
+            } catch (error) {
+              // Ignorar error si el track ya fue agregado
+            }
           });
-        });
-      } else {
-        console.warn('⚠️ Stream local no tiene tracks de audio');
+        }
       }
+    };
+    
+    // Intentar agregar tracks ahora
+    addLocalTracks();
+    
+    // También intentar cuando el stream esté disponible (si no lo está ahora)
+    if (!localStreamRef.current) {
+      const checkInterval = setInterval(() => {
+        if (localStreamRef.current) {
+          addLocalTracks();
+          clearInterval(checkInterval);
+        }
+      }, 100);
+      
+      // Limpiar después de 5 segundos
+      setTimeout(() => clearInterval(checkInterval), 5000);
     }
 
     return pc;
@@ -300,71 +245,20 @@ export function useWebRTC({
         const audioTracks = localStreamRef.current.getAudioTracks();
         const senders = pc.getSenders();
         
-        console.log('📤 Host creando oferta:', {
-          tracksDisponibles: audioTracks.length,
-          sendersExistentes: senders.length,
-        });
-        
         if (audioTracks.length > 0) {
           // Si no hay senders, agregar los tracks
           if (senders.length === 0) {
-            console.log('📤 Agregando tracks locales antes de crear oferta (host)');
             audioTracks.forEach((track) => {
-              // Asegurarse de que el track esté habilitado
               track.enabled = true;
               pc.addTrack(track, localStreamRef.current!);
-              console.log('✅ Track local agregado antes de crear oferta:', {
-                enabled: track.enabled,
-                muted: track.muted,
-                readyState: track.readyState,
-              });
-            });
-          } else {
-            // Verificar que los senders tengan tracks
-            console.log('📤 Ya hay senders, verificando tracks:', senders.length);
-            senders.forEach((sender, index) => {
-              if (sender.track) {
-                console.log(`✅ Sender ${index} tiene track:`, {
-                  kind: sender.track.kind,
-                  enabled: sender.track.enabled,
-                  muted: sender.track.muted,
-                  readyState: sender.track.readyState,
-                });
-              } else {
-                console.warn(`⚠️ Sender ${index} no tiene track`);
-              }
             });
           }
-        } else {
-          console.warn('⚠️ No hay tracks de audio en el stream local del host');
         }
-      } else {
-        console.warn('⚠️ No hay stream local disponible en el host');
       }
       
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: false,
-      });
-      
-      console.log('📤 Oferta creada:', {
-        type: offer.type,
-        sdp: offer.sdp?.substring(0, 100) + '...',
-        senders: pc.getSenders().length,
-        receivers: pc.getReceivers().length,
-      });
-      
-      // Verificar que los senders tengan tracks
-      const senders = pc.getSenders();
-      senders.forEach((sender, index) => {
-        if (sender.track) {
-          console.log(`📤 Sender ${index} en oferta:`, {
-            kind: sender.track.kind,
-            enabled: sender.track.enabled,
-            muted: sender.track.muted,
-            readyState: sender.track.readyState,
-          });
-        }
       });
       
       await pc.setLocalDescription(offer);
@@ -373,7 +267,6 @@ export function useWebRTC({
           type: 'offer',
           offer: offer,
         });
-        console.log('✅ Oferta enviada al guest');
       } else {
         console.error('❌ sendMessageRef.current no está disponible');
       }
@@ -391,7 +284,6 @@ export function useWebRTC({
     // Si no hay peer connection, crearla primero
     if (!pc) {
       createPeerConnection();
-      // Esperar un momento para que se establezca
       await new Promise(resolve => setTimeout(resolve, 100));
       pc = peerConnectionRef.current;
       
@@ -402,81 +294,53 @@ export function useWebRTC({
     }
 
     try {
-      console.log('📥 Guest recibió oferta del host');
-      
       // Asegurarse de que el stream local esté agregado antes de crear la respuesta
       if (localStreamRef.current) {
         const audioTracks = localStreamRef.current.getAudioTracks();
         const senders = pc.getSenders();
         
-        console.log('📤 Guest preparando respuesta:', {
-          tracksDisponibles: audioTracks.length,
-          sendersExistentes: senders.length,
-        });
-        
         if (audioTracks.length > 0) {
           // Si no hay senders, agregar los tracks
           if (senders.length === 0) {
-            console.log('📤 Agregando tracks locales antes de crear respuesta (guest)');
             audioTracks.forEach((track) => {
-              // Asegurarse de que el track esté habilitado
               track.enabled = true;
               pc.addTrack(track, localStreamRef.current!);
-              console.log('✅ Track local agregado antes de crear respuesta:', {
-                enabled: track.enabled,
-                muted: track.muted,
-                readyState: track.readyState,
-              });
             });
-          } else {
-            console.log('📤 Ya hay senders en la peer connection del guest');
           }
-        } else {
-          console.warn('⚠️ No hay tracks de audio en el stream local del guest');
         }
-      } else {
-        console.warn('⚠️ No hay stream local disponible en el guest');
       }
       
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      console.log('✅ Guest estableció descripción remota');
+      
+      // Procesar ICE candidates pendientes después de establecer descripción remota
+      while (pendingIceCandidatesRef.current.length > 0) {
+        const candidate = pendingIceCandidatesRef.current.shift();
+        if (candidate) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (error) {
+            console.error('❌ Error agregando ICE candidate pendiente:', error);
+          }
+        }
+      }
       
       // Verificar receivers después de establecer descripción remota
       const receivers = pc.getReceivers();
       console.log('📥 Receivers después de establecer descripción remota:', receivers.length);
-      receivers.forEach((receiver, index) => {
-        if (receiver.track) {
-          console.log(`📥 Receiver ${index}:`, {
-            kind: receiver.track.kind,
-            enabled: receiver.track.enabled,
-            muted: receiver.track.muted,
-            readyState: receiver.track.readyState,
-          });
-        }
-      });
       
       const answer = await pc.createAnswer();
-      console.log('📤 Guest creó respuesta:', {
-        type: answer.type,
-        senders: pc.getSenders().length,
-        receivers: pc.getReceivers().length,
-      });
-      
       await pc.setLocalDescription(answer);
-      console.log('✅ Guest estableció descripción local');
 
       if (sendMessageRef.current) {
         sendMessageRef.current({
           type: 'answer',
           answer: answer,
         });
-        console.log('✅ Respuesta enviada al host');
       }
     } catch (error: any) {
       console.error('❌ Error manejando offer:', error);
       if (error.name === 'InvalidStateError') {
         console.error('❌ La peer connection está en un estado inválido:', pc.signalingState);
-        // Recrear la conexión si está en estado inválido
         createPeerConnection();
       }
     }
@@ -493,23 +357,23 @@ export function useWebRTC({
     }
 
     try {
-      console.log('📥 Host recibió respuesta del guest');
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      console.log('✅ Host estableció descripción remota');
+      
+      // Procesar ICE candidates pendientes después de establecer descripción remota
+      while (pendingIceCandidatesRef.current.length > 0) {
+        const candidate = pendingIceCandidatesRef.current.shift();
+        if (candidate) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (error) {
+            console.error('❌ Error agregando ICE candidate pendiente:', error);
+          }
+        }
+      }
       
       // Verificar receivers después de establecer descripción remota
       const receivers = pc.getReceivers();
       console.log('📥 Receivers después de establecer descripción remota (host):', receivers.length);
-      receivers.forEach((receiver, index) => {
-        if (receiver.track) {
-          console.log(`📥 Receiver ${index} (host):`, {
-            kind: receiver.track.kind,
-            enabled: receiver.track.enabled,
-            muted: receiver.track.muted,
-            readyState: receiver.track.readyState,
-          });
-        }
-      });
     } catch (error) {
       console.error('❌ Error manejando answer:', error);
     }
@@ -524,18 +388,15 @@ export function useWebRTC({
     // Si no hay peer connection, crearla primero (puede llegar antes de la oferta)
     if (!pc) {
         createPeerConnection();
-      // Esperar un momento para que se establezca
       await new Promise(resolve => setTimeout(resolve, 100));
       pc = peerConnectionRef.current;
       
       if (!pc) {
-        console.warn('⚠️ No se pudo crear peer connection para ICE candidate');
         return;
       }
     }
 
     try {
-      // Intentar agregar el ICE candidate
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (error: any) {
       // Si el error es porque la descripción remota no está establecida, guardarlo en la cola
@@ -562,18 +423,11 @@ export function useWebRTC({
     const setup = async () => {
       // 1. Intentar obtener stream local (puede fallar si no hay permisos)
       const stream = await initializeLocalStream();
-      // Continuar incluso si no hay stream (modo solo escucha)
       if (!mounted) return;
 
       // Verificar que el stream local esté disponible antes de continuar
       if (!stream) {
-        console.warn('⚠️ No se pudo obtener stream local, continuando en modo solo escucha');
-      } else {
-        console.log('✅ Stream local obtenido:', {
-          id: stream.id,
-          active: stream.active,
-          tracks: stream.getAudioTracks().length,
-        });
+        // Continuar en modo solo escucha
       }
 
       // 2. Crear conexión peer solo si no existe
@@ -585,13 +439,10 @@ export function useWebRTC({
         if (stream && peerConnectionRef.current) {
           const audioTracks = stream.getAudioTracks();
           if (audioTracks.length > 0) {
-            console.log('📤 Agregando tracks locales después de crear peer connection');
             audioTracks.forEach((track) => {
-              // Asegurarse de que el track esté habilitado
               track.enabled = true;
               if (peerConnectionRef.current) {
                 peerConnectionRef.current.addTrack(track, stream);
-                console.log('✅ Track local agregado después de crear peer connection');
               }
             });
           }
@@ -600,24 +451,14 @@ export function useWebRTC({
 
       // 3. Si es host, crear offer cuando el remoto esté listo
       if (isHost && sendMessageRef.current) {
-        if (waitForRemote) {
-          // Esperar a que el remoto esté conectado (se llama desde fuera cuando remoteNickname está listo)
-          console.log('⏳ Host esperando a que el remoto se conecte antes de crear oferta');
-          // La oferta se creará desde el componente padre cuando detecte al remoto
-        } else {
+        if (!waitForRemote) {
           // Fallback: esperar un delay si waitForRemote no está habilitado
-          // Pero asegurarse de que el stream local esté disponible
           setTimeout(() => {
             if (mounted && peerConnectionRef.current && sendMessageRef.current) {
-              // Verificar que el stream local esté disponible antes de crear la oferta
               if (!localStreamRef.current) {
-                console.warn('⚠️ Host: Stream local no disponible, reintentando...');
-                // Reintentar después de un momento
                 setTimeout(() => {
                   if (mounted && peerConnectionRef.current && sendMessageRef.current && localStreamRef.current) {
                     createOffer();
-                  } else {
-                    console.error('❌ Host: No se pudo obtener stream local después de reintentar');
                   }
                 }, 1000);
                 return;
@@ -633,13 +474,10 @@ export function useWebRTC({
 
     return () => {
       mounted = false;
-      // Solo limpiar si realmente creamos la conexión en este efecto
-      // No limpiar si la conexión se creó en otro lugar (como startWebRTC)
       if (peerConnectionCreated && peerConnectionRef.current) {
         peerConnectionRef.current.close();
         peerConnectionRef.current = null;
       }
-      // Limpiar stream local
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => track.stop());
         localStreamRef.current = null;
@@ -668,34 +506,22 @@ export function useWebRTC({
 
   // Exponer función para crear oferta manualmente (cuando el remoto esté listo)
   const startWebRTC = useCallback(() => {
-    console.log('🚀 startWebRTC llamado', { isHost, hasPeerConnection: !!peerConnectionRef.current, hasSendMessage: !!sendMessageRef.current, hasLocalStream: !!localStreamRef.current });
-    
     if (!isHost) {
-      console.log('⚠️ startWebRTC: No es host, ignorando');
       return;
     }
     
     // Verificar que el stream local esté disponible
     if (!localStreamRef.current) {
-      console.warn('⚠️ startWebRTC: No hay stream local disponible, esperando...');
-      // Esperar con múltiples reintentos (hasta 3 segundos)
       let attempts = 0;
-      const maxAttempts = 6; // 6 intentos de 500ms = 3 segundos
+      const maxAttempts = 6;
       const checkStream = setInterval(() => {
         attempts++;
         if (localStreamRef.current && peerConnectionRef.current && sendMessageRef.current) {
-          console.log('✅ startWebRTC: Stream local ahora disponible, creando oferta...');
           clearInterval(checkStream);
           createOffer();
         } else if (attempts >= maxAttempts) {
-          console.error('❌ startWebRTC: Stream local aún no disponible después de esperar', {
-            hasLocalStream: !!localStreamRef.current,
-            hasPeerConnection: !!peerConnectionRef.current,
-            hasSendMessage: !!sendMessageRef.current,
-          });
+          console.error('❌ startWebRTC: Stream local aún no disponible después de esperar');
           clearInterval(checkStream);
-        } else {
-          console.log(`⏳ startWebRTC: Esperando stream local... (intento ${attempts}/${maxAttempts})`);
         }
       }, 500);
       return;
@@ -703,29 +529,20 @@ export function useWebRTC({
     
     // Si no hay peer connection, crearla primero
     if (!peerConnectionRef.current) {
-      console.log('🆕 startWebRTC: Creando nueva peer connection');
       createPeerConnection();
-      // Esperar un momento para que se establezca
       setTimeout(() => {
         const pc = peerConnectionRef.current;
         if (pc && sendMessageRef.current) {
-          // Verificar que la conexión no esté cerrada
           if (pc.signalingState === 'closed') {
-            console.warn('⚠️ startWebRTC: Peer connection cerrada, recreando...');
             createPeerConnection();
             setTimeout(() => {
               if (peerConnectionRef.current && sendMessageRef.current) {
-                console.log('✅ startWebRTC: Creando oferta después de recrear peer connection');
                 createOffer();
               }
             }, 100);
             return;
           }
-          
-          console.log('✅ startWebRTC: Creando oferta con nueva peer connection');
           createOffer();
-        } else {
-          console.error('❌ startWebRTC: No hay peer connection o sendMessage después de crear');
         }
       }, 200);
       return;
@@ -734,11 +551,9 @@ export function useWebRTC({
     // Verificar que la conexión existente no esté cerrada
     const pc = peerConnectionRef.current;
     if (pc.signalingState === 'closed') {
-      console.warn('⚠️ startWebRTC: Peer connection existente cerrada, recreando...');
       createPeerConnection();
       setTimeout(() => {
         if (peerConnectionRef.current && sendMessageRef.current) {
-          console.log('✅ startWebRTC: Creando oferta después de recrear peer connection');
           createOffer();
         }
       }, 200);
@@ -750,7 +565,6 @@ export function useWebRTC({
       return;
     }
     
-    console.log('✅ startWebRTC: Creando oferta con peer connection existente');
     createOffer();
   }, [isHost, createOffer, createPeerConnection]);
 

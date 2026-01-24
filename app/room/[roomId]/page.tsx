@@ -335,19 +335,11 @@ function RoomPageContent() {
 
   // Configurar signaling primero (usando Pusher para producción)
   useEffect(() => {
-    console.log('🆕 Creando PusherSignalingClient...', {
-      roomId,
-      userId: userIdRef.current,
-      nickname,
-      isHost,
-    });
-    
     const signaling = new PusherSignalingClient(
       roomId,
       userIdRef.current,
       nickname,
       (message: SignalingMessage) => {
-        console.log('📨 Mensaje recibido en handler:', message.type, message);
         // Para beat-play, beat-pause, beat-restart, no filtrar por userId porque pueden no tenerlo
         const isBeatControl = message.type === 'beat-play' || message.type === 'beat-pause' || message.type === 'beat-restart';
         
@@ -400,23 +392,13 @@ function RoomPageContent() {
             startBattle(message.timestamp);
             break;
           case 'user-joined':
-            console.log('📥 Mensaje user-joined recibido:', {
-              messageUserId: message.userId,
-              currentUserId: userIdRef.current,
-              isHost,
-              webrtcStarted: webrtcStartedRef.current,
-              hasStartWebRTC: !!startWebRTC,
-            });
             if (message.userId !== userIdRef.current) {
-              console.log('✅ user-joined es de otro usuario, estableciendo remoteNickname');
               setRemoteNickname(message.nickname);
               // Si es host, enviar el beat seleccionado y iniciar WebRTC (solo una vez)
               if (isHost && signalingRef.current && !webrtcStartedRef.current) {
-                console.log('🎯 Host detectado, iniciando WebRTC...');
                 webrtcStartedRef.current = true;
                 setTimeout(() => {
                   if (signalingRef.current) {
-                    console.log('📤 Enviando beat-selected al guest');
                     signalingRef.current.send({
                       type: 'beat-selected',
                       beatNumber: selectedBeat,
@@ -425,24 +407,12 @@ function RoomPageContent() {
                 }, 500);
                 setTimeout(() => {
                   if (startWebRTC) {
-                    console.log('🎯 Host: Llamando startWebRTC después de recibir user-joined');
                     startWebRTC();
                   } else {
-                    console.error('❌ Host: startWebRTC no está disponible');
                     webrtcStartedRef.current = false;
                   }
                 }, 1000);
-              } else {
-                if (!isHost) {
-                  console.log('ℹ️ No es host, esperando oferta del host');
-                } else if (webrtcStartedRef.current) {
-                  console.log('ℹ️ WebRTC ya fue iniciado anteriormente');
-                } else if (!signalingRef.current) {
-                  console.error('❌ signalingRef.current no está disponible');
-                }
               }
-            } else {
-              console.log('⚠️ user-joined es del mismo usuario, ignorando');
             }
             break;
           case 'beat-selected':
@@ -522,12 +492,9 @@ function RoomPageContent() {
     );
 
     signalingRef.current = signaling;
-    console.log('🔌 Llamando signaling.connect()...');
     signaling.connect();
-    console.log('✅ signaling.connect() llamado');
 
     return () => {
-      console.log('🧹 Desconectando PusherSignalingClient...');
       signaling.disconnect();
     };
   }, [roomId, nickname, isHost, selectedBeat]);
@@ -563,19 +530,12 @@ function RoomPageContent() {
     if (isHost && remoteNickname && !webrtcStartedRef.current && signalingRef.current && startWebRTC) {
       // Verificar que el stream local esté disponible antes de iniciar WebRTC
       if (!localStream) {
-        console.log('⏳ Host: Esperando stream local antes de iniciar WebRTC...');
         // Esperar hasta que el stream local esté disponible
         const checkLocalStream = setInterval(() => {
           if (localStream) {
             clearInterval(checkLocalStream);
             webrtcStartedRef.current = true;
-            console.log('🎯 Host detectado, iniciando WebRTC...', {
-              remoteNickname,
-              hasLocalStream: !!localStream,
-              hasWebRTC: !!startWebRTC,
-            });
             
-            // Esperar un momento para asegurar que el signaling esté listo
             setTimeout(() => {
               if (signalingRef.current) {
                 signalingRef.current.send({
@@ -586,10 +546,8 @@ function RoomPageContent() {
             }, 500);
             setTimeout(() => {
               if (startWebRTC) {
-                console.log('🎯 Host: Llamando startWebRTC después de detectar guest existente');
                 startWebRTC();
               } else {
-                console.error('❌ Host: startWebRTC no está disponible');
                 webrtcStartedRef.current = false;
               }
             }, 1000);
@@ -600,7 +558,6 @@ function RoomPageContent() {
         setTimeout(() => {
           clearInterval(checkLocalStream);
           if (!webrtcStartedRef.current) {
-            console.warn('⚠️ Host: Timeout esperando stream local, intentando iniciar WebRTC de todos modos...');
             webrtcStartedRef.current = true;
             setTimeout(() => {
               if (startWebRTC) {
@@ -613,13 +570,7 @@ function RoomPageContent() {
         return () => clearInterval(checkLocalStream);
       } else {
         webrtcStartedRef.current = true;
-        console.log('🎯 Host detectado, iniciando WebRTC...', {
-          remoteNickname,
-          hasLocalStream: !!localStream,
-          hasWebRTC: !!startWebRTC,
-        });
         
-        // Esperar un momento para asegurar que el signaling esté listo
         setTimeout(() => {
           if (signalingRef.current) {
             signalingRef.current.send({
@@ -630,10 +581,8 @@ function RoomPageContent() {
         }, 500);
         setTimeout(() => {
           if (startWebRTC) {
-            console.log('🎯 Host: Llamando startWebRTC después de detectar guest existente');
             startWebRTC();
           } else {
-            console.error('❌ Host: startWebRTC no está disponible');
             webrtcStartedRef.current = false;
           }
         }, 1000);
@@ -697,67 +646,32 @@ function RoomPageContent() {
   // También asignamos el stream al elemento <audio> como fallback
   useEffect(() => {
     if (remoteStream && remoteAudioRef.current) {
-      console.log('🎧 Stream remoto recibido en componente:', {
-        id: remoteStream.id,
-        active: remoteStream.active,
-        tracks: remoteStream.getTracks().map(t => ({
-          kind: t.kind,
-          enabled: t.enabled,
-          muted: t.muted,
-          readyState: t.readyState,
-        })),
-      });
+      console.log('🎧 Stream remoto recibido en componente');
       
       // Asignar stream al elemento <audio> como fallback (algunos navegadores lo requieren)
       if (remoteAudioRef.current.srcObject !== remoteStream) {
         remoteAudioRef.current.srcObject = remoteStream;
-        console.log('✅ Stream remoto asignado al elemento <audio>');
-        
-        // Intentar reproducir (puede fallar silenciosamente si no hay interacción del usuario)
-        remoteAudioRef.current.play().catch((error) => {
-          console.log('ℹ️ No se pudo reproducir automáticamente (requiere interacción del usuario):', error.message);
+        remoteAudioRef.current.play().catch(() => {
+          // Ignorar error de autoplay
         });
       }
       
       // Verificar que el stream tenga tracks de audio
       const audioTracks = remoteStream.getAudioTracks();
-      if (audioTracks.length === 0) {
-        console.warn('⚠️ Stream remoto no tiene tracks de audio');
-        return;
-      }
-      
-      // Verificar que los tracks estén habilitados
-      const enabledTracks = audioTracks.filter(track => track.enabled);
-      if (enabledTracks.length === 0) {
-        console.warn('⚠️ Todos los tracks de audio remoto están deshabilitados');
-      } else {
-        console.log(`✅ ${enabledTracks.length} track(s) de audio remoto habilitado(s)`);
-        
-        // Desbloquear audio cuando recibimos el stream remoto
-        unlockAudio();
-        
-        // Verificar que el stream esté realmente activo
-        if (!remoteStream.active) {
-          console.warn('⚠️ Stream remoto no está activo');
-        } else {
-          console.log('✅ Stream remoto está activo');
-        }
-      }
-      
-      // Escuchar cambios en los tracks del stream remoto
-      audioTracks.forEach((track) => {
-        track.onended = () => {
-          console.warn('⚠️ Track de audio remoto terminó');
-        };
-        track.onmute = () => {
-          console.warn('⚠️ Track de audio remoto fue muteado');
-        };
-        track.onunmute = () => {
-          console.log('✅ Track de audio remoto fue desmuteado');
-          // Desbloquear audio cuando se desmutea un track
+      if (audioTracks.length > 0) {
+        const enabledTracks = audioTracks.filter(track => track.enabled);
+        if (enabledTracks.length > 0) {
+          // Desbloquear audio cuando recibimos el stream remoto
           unlockAudio();
-        };
-      });
+        }
+        
+        // Escuchar cambios en los tracks del stream remoto
+        audioTracks.forEach((track) => {
+          track.onunmute = () => {
+            unlockAudio();
+          };
+        });
+      }
     }
   }, [remoteStream]);
 
