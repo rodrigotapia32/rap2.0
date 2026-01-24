@@ -1,6 +1,6 @@
 /**
- * Cliente Pusher para signaling
- * Reemplaza el WebSocket nativo para funcionar en Vercel
+ * Pusher signaling client for WebRTC handshake and game events.
+ * Uses server-triggered events for reliability (no client event rate limits).
  */
 
 import Pusher from 'pusher-js';
@@ -12,9 +12,11 @@ export class PusherSignalingClient {
   private roomId: string;
   private userId: string;
   private nickname: string;
+  private sessionId: string;
   private onMessage: (message: SignalingMessage) => void;
   private onConnectionChange?: (connected: boolean) => void;
   private isConnected = false;
+  private beforeUnloadHandler: (() => void) | null = null;
 
   constructor(
     roomId: string,
@@ -26,289 +28,202 @@ export class PusherSignalingClient {
     this.roomId = roomId;
     this.userId = userId;
     this.nickname = nickname;
+    this.sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     this.onMessage = onMessage;
     this.onConnectionChange = onConnectionChange;
   }
 
-  /**
-   * Conecta a Pusher
-   */
   connect() {
     const pusherKey = process.env.NEXT_PUBLIC_PUSHER_KEY;
     const pusherCluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER || 'us2';
 
     if (!pusherKey) {
-      console.error('⚠️ NEXT_PUBLIC_PUSHER_KEY no está configurado');
-      if (this.onConnectionChange) {
-        this.onConnectionChange(false);
-      }
+      console.error('NEXT_PUBLIC_PUSHER_KEY not configured');
+      this.onConnectionChange?.(false);
       return;
     }
 
     try {
       this.pusher = new Pusher(pusherKey, {
         cluster: pusherCluster,
-        // Habilitar client events
         enabledTransports: ['ws', 'wss'],
-        // Endpoint de autenticación para canales privados
         authEndpoint: '/api/pusher/auth',
         auth: {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         },
       });
 
-
-      // Suscribirse al canal de la sala (usando private channel para client events)
       const channelName = `private-room-${this.roomId}`;
       this.channel = this.pusher.subscribe(channelName);
-      
 
-      // IMPORTANTE: Hacer bindings ANTES de que se complete la suscripción
-      // para no perder mensajes que lleguen temprano
+      // ─── Bind message handlers BEFORE subscription completes ───
 
-          // Escuchar mensajes de signaling (client events y server events)
-          this.channel.bind('client-signaling', (data: SignalingMessage) => {
-            // Para eventos de control de beat, no filtrar por userId (el host controla)
-            const isBeatControl = data.type === 'beat-play' || data.type === 'beat-pause' || data.type === 'beat-restart';
-            // No procesar nuestros propios mensajes (excepto controles de beat)
-            if (!isBeatControl && data.userId && data.userId === this.userId) {
-              return;
-            }
-            this.onMessage(data);
-          });
+      // Server-triggered signaling (WebRTC + handshake)
+      this.channel.bind('server-signaling', (data: SignalingMessage) => {
+        if (data.userId && data.userId === this.userId) return;
+        this.onMessage(data);
+      });
 
-          // Escuchar mensajes del servidor (para WebRTC, sin límite de client events)
-          this.channel.bind('server-signaling', (data: SignalingMessage) => {
-            // No procesar nuestros propios mensajes
-            if (data.userId && data.userId === this.userId) {
-              return;
-            }
-            this.onMessage(data);
-          });
+      // Client-triggered signaling (beat controls, ready, etc.)
+      this.channel.bind('client-signaling', (data: SignalingMessage) => {
+        const isBeatControl = data.type === 'beat-play' || data.type === 'beat-pause' || data.type === 'beat-restart';
+        if (!isBeatControl && data.userId && data.userId === this.userId) return;
+        this.onMessage(data);
+      });
 
-      // Escuchar cuando otros usuarios se unen (desde servidor)
+      // Peer hello (new handshake)
+      this.channel.bind('peer-hello', (data: { userId: string; nickname: string; sessionId: string }) => {
+        if (data.userId === this.userId) return;
+        this.onMessage({ type: 'peer-hello', ...data });
+      });
+
+      // Peer hello ack
+      this.channel.bind('peer-hello-ack', (data: { userId: string; targetUserId: string; sessionId: string }) => {
+        if (data.userId === this.userId) return;
+        if (data.targetUserId !== this.userId) return; // Not for us
+        this.onMessage({ type: 'peer-hello-ack', ...data });
+      });
+
+      // WebRTC initiate
+      this.channel.bind('webrtc-initiate', (data: { userId: string; sessionId: string }) => {
+        if (data.userId === this.userId) return;
+        this.onMessage({ type: 'webrtc-initiate', ...data });
+      });
+
+      // WebRTC renegotiate
+      this.channel.bind('webrtc-renegotiate', (data: { userId: string; sessionId: string }) => {
+        if (data.userId === this.userId) return;
+        this.onMessage({ type: 'webrtc-renegotiate', ...data });
+      });
+
+      // Peer disconnected
+      this.channel.bind('peer-disconnected', (data: { userId: string }) => {
+        if (data.userId === this.userId) return;
+        this.onMessage({ type: 'peer-disconnected', ...data });
+      });
+
+      // Legacy user-joined (backwards compat during transition)
       this.channel.bind('user-joined', (data: { userId: string; nickname: string }) => {
         if (data.userId !== this.userId) {
-          this.onMessage({
-            type: 'user-joined',
-            userId: data.userId,
-            nickname: data.nickname,
-          });
+          this.onMessage({ type: 'user-joined', userId: data.userId, nickname: data.nickname });
         }
       });
 
-      // También escuchar client events como fallback
-      this.channel.bind('client-user-joined', (data: { userId: string; nickname: string }) => {
-        if (data.userId !== this.userId) {
-          this.onMessage({
-            type: 'user-joined',
-            userId: data.userId,
-            nickname: data.nickname,
-          });
-        }
-      });
-
-      // Escuchar cuando otros usuarios se van (client events)
+      // User left via client event
       this.channel.bind('client-user-left', (data: { userId: string }) => {
         if (data.userId !== this.userId) {
-          this.onMessage({
-            type: 'user-left',
-            userId: data.userId,
-          });
+          this.onMessage({ type: 'user-left', userId: data.userId });
         }
       });
 
-      // Escuchar cuando la suscripción es exitosa
-      this.channel.bind('pusher:subscription_succeeded', async () => {
-        const channelName = `private-room-${this.roomId}`;
+      // ─── Subscription succeeded ───
+      this.channel.bind('pusher:subscription_succeeded', () => {
         this.isConnected = true;
-        if (this.onConnectionChange) {
-          this.onConnectionChange(true);
-        }
-        
-        // Notificar que el usuario se unió usando el servidor (más confiable que client events)
-        try {
-          const response = await fetch('/api/pusher/trigger', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              channel: channelName,
-              event: 'user-joined',
-              data: {
-                userId: this.userId,
-                nickname: this.nickname,
-              },
-            }),
-          });
+        this.onConnectionChange?.(true);
 
-          if (!response.ok) {
-            console.warn('⚠️ Pusher: Error al enviar user-joined al servidor, usando fallback');
-            // Fallback a client events
-            this.trigger('user-joined', {
-              userId: this.userId,
-              nickname: this.nickname,
-            });
-          }
-        } catch (error) {
-          // Fallback a client events
-          this.trigger('user-joined', {
-            userId: this.userId,
-            nickname: this.nickname,
-          });
-        }
-        
-        // Reenviar usando servidor para asegurar que el otro usuario lo reciba
-        // Aumentar retries y frecuencia en móviles para mejor confiabilidad
-        let retryCount = 0;
-        const maxRetries = 5; // Aumentado de 3 a 5
-        const retryInterval = setInterval(async () => {
-          if (retryCount < maxRetries && this.isConnected) {
-            try {
-              await fetch('/api/pusher/trigger', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  channel: channelName,
-                  event: 'user-joined',
-                  data: {
-                    userId: this.userId,
-                    nickname: this.nickname,
-                  },
-                }),
-              });
-            } catch (error) {
-              // Silenciar errores de reenvío
-            }
-            retryCount++;
-          } else {
-            clearInterval(retryInterval);
-          }
-        }, 1000); // Reducido de 1500ms a 1000ms para más frecuencia
+        // Send a single peer-hello via server trigger (no retry loop)
+        this.serverTrigger('peer-hello', {
+          userId: this.userId,
+          nickname: this.nickname,
+          sessionId: this.sessionId,
+        });
       });
 
-      // Eventos de conexión
+      // ─── Connection lifecycle ───
       this.pusher.connection.bind('connected', () => {
-        // Conexión establecida
+        // Connection established
       });
 
       this.pusher.connection.bind('disconnected', () => {
         this.isConnected = false;
-        if (this.onConnectionChange) {
-          this.onConnectionChange(false);
-        }
-      });
-      
-      this.pusher.connection.bind('error', (error: any) => {
-        console.error('❌ Pusher: Error de conexión:', error);
+        this.onConnectionChange?.(false);
       });
 
-      this.pusher.connection.bind('error', (err: any) => {
+      this.pusher.connection.bind('error', () => {
         this.isConnected = false;
-        if (this.onConnectionChange) {
-          this.onConnectionChange(false);
-        }
+        this.onConnectionChange?.(false);
       });
+
+      // ─── beforeunload: notify peer of disconnect ───
+      this.beforeUnloadHandler = () => {
+        // Use sendBeacon for reliable delivery on page close
+        const channelName = `private-room-${this.roomId}`;
+        const payload = new Blob(
+          [JSON.stringify({
+            channel: channelName,
+            event: 'peer-disconnected',
+            data: { userId: this.userId },
+          })],
+          { type: 'application/json' }
+        );
+        navigator.sendBeacon('/api/pusher/trigger', payload);
+      };
+      window.addEventListener('beforeunload', this.beforeUnloadHandler);
+
     } catch (error) {
-      console.error('❌ Error conectando a Pusher:', error);
-      if (this.onConnectionChange) {
-        this.onConnectionChange(false);
-      }
+      console.error('Error connecting to Pusher:', error);
+      this.onConnectionChange?.(false);
     }
   }
 
   /**
-   * Envía un mensaje a través de Pusher
-   * Para mensajes WebRTC (offer, answer, ice-candidate) usa el servidor para evitar límites
+   * Send a signaling message.
+   * WebRTC and handshake messages use server trigger; game events use client events.
    */
   async send(message: SignalingMessage) {
-    if (!this.channel || !this.isConnected) {
-      return;
-    }
+    if (!this.channel || !this.isConnected) return;
 
-    try {
-      // Agregar userId al mensaje para identificar el remitente
-      const messageWithUser = {
-        ...message,
-        userId: this.userId,
-      };
+    const messageWithUser = { ...message, userId: this.userId };
 
+    // Messages that must go through server (reliable, no rate limit)
+    const serverTypes = ['offer', 'answer', 'ice-candidate', 'peer-hello', 'peer-hello-ack',
+      'webrtc-initiate', 'webrtc-renegotiate', 'peer-disconnected'];
 
-      // Para mensajes WebRTC, usar el servidor para evitar límite de client events
-      if (message.type === 'offer' || message.type === 'answer' || message.type === 'ice-candidate') {
-        const channelName = `private-room-${this.roomId}`;
-        try {
-          const response = await fetch('/api/pusher/trigger', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              channel: channelName,
-              event: 'server-signaling',
-              data: messageWithUser,
-            }),
-          });
-
-          if (!response.ok) {
-            // Fallback a client events si el servidor falla
-            this.trigger('signaling', messageWithUser);
-          }
-        } catch (error) {
-          // Fallback a client events si hay error
-          this.trigger('signaling', messageWithUser);
-        }
-      } else {
-        // Para otros mensajes (ready, beat-selected, beat-play, etc), usar client events
-        this.trigger('signaling', messageWithUser);
-      }
-    } catch (error) {
-      console.error('❌ [Pusher] Error enviando mensaje:', error);
+    if (serverTypes.includes(message.type)) {
+      await this.serverTrigger('server-signaling', messageWithUser);
+    } else {
+      // Game events via client events
+      this.trigger('signaling', messageWithUser);
     }
   }
 
   /**
-   * Trigger un evento en el canal usando client events
-   * Nota: Client events están limitados a 10 eventos/minuto en plan gratis de Pusher
-   * Para producción, considera usar un servidor backend
+   * Send via server trigger endpoint (reliable, no client event rate limit)
+   */
+  private async serverTrigger(event: string, data: any): Promise<boolean> {
+    const channelName = `private-room-${this.roomId}`;
+    try {
+      const response = await fetch('/api/pusher/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: channelName, event, data }),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Trigger a client event on the channel
    */
   private trigger(event: string, data: any): boolean {
-    if (!this.channel) {
-      console.warn('⚠️ No hay canal para trigger');
-      return false;
-    }
-    if (!this.isConnected) {
-      console.warn('⚠️ Canal no conectado para trigger');
-      return false;
-    }
-    if (!this.channel.trigger) {
-      console.warn('⚠️ Canal no tiene método trigger (client events no habilitados?)');
-      return false;
-    }
+    if (!this.channel || !this.isConnected || !this.channel.trigger) return false;
     try {
       this.channel.trigger(`client-${event}`, data);
       return true;
-    } catch (error: any) {
-      // Verificar si es error de límite de client events
-      if (error?.message?.includes('limit') || error?.message?.includes('rate')) {
-        console.error('❌ Límite de client events alcanzado en Pusher (plan gratis: 10/minuto)');
-        console.error('💡 Solución: Usar servidor backend o upgrade de plan Pusher');
-      } else {
-        console.error('❌ Error trigger event:', error);
-      }
+    } catch {
       return false;
     }
   }
 
-  /**
-   * Cierra la conexión
-   */
   disconnect() {
+    // Remove beforeunload listener
+    if (this.beforeUnloadHandler) {
+      window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+      this.beforeUnloadHandler = null;
+    }
+
     if (this.channel) {
       this.channel.unbind_all();
       this.pusher?.unsubscribe(this.channel.name);
@@ -318,8 +233,6 @@ export class PusherSignalingClient {
       this.pusher = null;
     }
     this.isConnected = false;
-    if (this.onConnectionChange) {
-      this.onConnectionChange(false);
-    }
+    this.onConnectionChange?.(false);
   }
 }

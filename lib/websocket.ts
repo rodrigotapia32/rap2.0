@@ -6,9 +6,14 @@
  */
 
 export type SignalingMessage =
-  | { type: 'offer'; offer: RTCSessionDescriptionInit; userId?: string }
-  | { type: 'answer'; answer: RTCSessionDescriptionInit; userId?: string }
-  | { type: 'ice-candidate'; candidate: RTCIceCandidateInit; userId?: string }
+  | { type: 'offer'; offer: RTCSessionDescriptionInit; userId?: string; sessionId?: string }
+  | { type: 'answer'; answer: RTCSessionDescriptionInit; userId?: string; sessionId?: string }
+  | { type: 'ice-candidate'; candidate: RTCIceCandidateInit; userId?: string; sessionId?: string }
+  | { type: 'peer-hello'; userId: string; nickname: string; sessionId: string }
+  | { type: 'peer-hello-ack'; userId: string; targetUserId: string; sessionId: string }
+  | { type: 'webrtc-initiate'; userId: string; sessionId: string }
+  | { type: 'webrtc-renegotiate'; userId: string; sessionId: string }
+  | { type: 'peer-disconnected'; userId: string }
   | { type: 'ready'; userId: string }
   | { type: 'start-battle'; timestamp: number; userId?: string }
   | { type: 'user-joined'; userId: string; nickname: string }
