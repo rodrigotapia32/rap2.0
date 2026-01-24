@@ -522,9 +522,12 @@ function RoomPageContent() {
     );
 
     signalingRef.current = signaling;
+    console.log('🔌 Llamando signaling.connect()...');
     signaling.connect();
+    console.log('✅ signaling.connect() llamado');
 
     return () => {
+      console.log('🧹 Desconectando PusherSignalingClient...');
       signaling.disconnect();
     };
   }, [roomId, nickname, isHost, selectedBeat]);
