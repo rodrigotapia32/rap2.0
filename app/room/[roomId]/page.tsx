@@ -623,11 +623,31 @@ function RoomPageContent() {
         return;
       }
       
+      // Verificar que los tracks estén habilitados
+      const enabledTracks = audioTracks.filter(track => track.enabled);
+      if (enabledTracks.length === 0) {
+        console.warn('⚠️ Todos los tracks de audio remoto están deshabilitados');
+      }
+      
       // Asignar el stream y reproducir
       remoteAudioRef.current.srcObject = remoteStream;
       remoteAudioRef.current.volume = 1; // Asegurar que el volumen esté al máximo
+      remoteAudioRef.current.muted = false; // Asegurar que no esté muteado
       remoteAudioRef.current.play().catch((error) => {
         console.error('❌ Error reproduciendo audio remoto:', error);
+      });
+      
+      // Escuchar cambios en los tracks del stream remoto
+      audioTracks.forEach((track) => {
+        track.onended = () => {
+          console.warn('⚠️ Track de audio remoto terminó');
+        };
+        track.onmute = () => {
+          console.warn('⚠️ Track de audio remoto fue muteado');
+        };
+        track.onunmute = () => {
+          console.log('✅ Track de audio remoto fue desmuteado');
+        };
       });
     }
   }, [remoteStream]);
@@ -893,6 +913,28 @@ function RoomPageContent() {
           <p style={{ color: '#888', fontSize: '0.9rem', textAlign: 'center' }}>
             {isBeatPlaying ? '▶️ Reproduciendo' : '⏸️ Pausado'} - Controlado por el host
           </p>
+        </div>
+      )}
+
+      {/* Controles de micrófono */}
+      {isConnected && localStream && (
+        <div className={styles.beatControls}>
+          <label className={styles.label}>Micrófono:</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button
+              onClick={toggleMicrophone}
+              className={styles.beatButton}
+              style={{
+                background: isMicMuted ? '#f5576c' : '#10b981',
+                flex: '0 0 auto',
+              }}
+            >
+              {isMicMuted ? '🎤 Micrófono Muteado' : '🎤 Micrófono Activo'}
+            </button>
+            <span style={{ color: '#888', fontSize: '0.9rem' }}>
+              {isMicMuted ? 'Tu micrófono está desactivado' : 'Tu micrófono está activo'}
+            </span>
+          </div>
         </div>
       )}
 
