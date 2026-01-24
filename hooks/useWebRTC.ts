@@ -165,6 +165,7 @@ export function useWebRTC({
           enabled: event.track.enabled,
           muted: event.track.muted,
           readyState: event.track.readyState,
+          id: event.track.id,
         },
       });
       
@@ -175,15 +176,39 @@ export function useWebRTC({
           id: stream.id,
           active: stream.active,
           tracks: stream.getTracks().length,
+          audioTracks: stream.getAudioTracks().length,
         });
+        
+        // Verificar que el stream tenga tracks de audio
+        const audioTracks = stream.getAudioTracks();
+        if (audioTracks.length > 0) {
+          console.log('🎤 Tracks de audio en stream remoto:', audioTracks.map(t => ({
+            enabled: t.enabled,
+            muted: t.muted,
+            readyState: t.readyState,
+            label: t.label,
+          })));
+        }
+        
+        // Llamar al callback para que el componente pueda procesar el stream
         onRemoteStream(stream);
       } else if (event.track && onRemoteStream) {
         // Si no hay stream pero hay track, crear uno nuevo
         console.log('⚠️ No hay stream en evento, creando uno nuevo con el track');
         const newStream = new MediaStream([event.track]);
+        console.log('✅ Stream creado desde track:', {
+          id: newStream.id,
+          active: newStream.active,
+          tracks: newStream.getTracks().length,
+        });
         onRemoteStream(newStream);
       } else {
-        console.warn('⚠️ Evento ontrack sin stream ni track válido');
+        console.warn('⚠️ Evento ontrack sin stream ni track válido', {
+          hasStreams: !!event.streams,
+          streamsLength: event.streams?.length || 0,
+          hasTrack: !!event.track,
+          hasCallback: !!onRemoteStream,
+        });
       }
     };
 
