@@ -678,15 +678,26 @@ export function useWebRTC({
     // Verificar que el stream local esté disponible
     if (!localStreamRef.current) {
       console.warn('⚠️ startWebRTC: No hay stream local disponible, esperando...');
-      // Esperar un momento y reintentar (usar createOffer directamente en lugar de recursión)
-      setTimeout(() => {
+      // Esperar con múltiples reintentos (hasta 3 segundos)
+      let attempts = 0;
+      const maxAttempts = 6; // 6 intentos de 500ms = 3 segundos
+      const checkStream = setInterval(() => {
+        attempts++;
         if (localStreamRef.current && peerConnectionRef.current && sendMessageRef.current) {
           console.log('✅ startWebRTC: Stream local ahora disponible, creando oferta...');
+          clearInterval(checkStream);
           createOffer();
+        } else if (attempts >= maxAttempts) {
+          console.error('❌ startWebRTC: Stream local aún no disponible después de esperar', {
+            hasLocalStream: !!localStreamRef.current,
+            hasPeerConnection: !!peerConnectionRef.current,
+            hasSendMessage: !!sendMessageRef.current,
+          });
+          clearInterval(checkStream);
         } else {
-          console.error('❌ startWebRTC: Stream local aún no disponible después de esperar');
+          console.log(`⏳ startWebRTC: Esperando stream local... (intento ${attempts}/${maxAttempts})`);
         }
-      }, 1000);
+      }, 500);
       return;
     }
     

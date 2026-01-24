@@ -561,26 +561,85 @@ function RoomPageContent() {
   // Necesitamos verificar si ya hay un remoteNickname y iniciar WebRTC
   useEffect(() => {
     if (isHost && remoteNickname && !webrtcStartedRef.current && signalingRef.current && startWebRTC) {
-      webrtcStartedRef.current = true;
-      setTimeout(() => {
-        if (signalingRef.current) {
-          signalingRef.current.send({
-            type: 'beat-selected',
-            beatNumber: selectedBeat,
-          });
-        }
-      }, 500);
-      setTimeout(() => {
-        if (startWebRTC) {
-          console.log('🎯 Host: Llamando startWebRTC después de detectar guest existente');
-          startWebRTC();
-        } else {
-          console.error('❌ Host: startWebRTC no está disponible');
-          webrtcStartedRef.current = false;
-        }
-      }, 1000);
+      // Verificar que el stream local esté disponible antes de iniciar WebRTC
+      if (!localStream) {
+        console.log('⏳ Host: Esperando stream local antes de iniciar WebRTC...');
+        // Esperar hasta que el stream local esté disponible
+        const checkLocalStream = setInterval(() => {
+          if (localStream) {
+            clearInterval(checkLocalStream);
+            webrtcStartedRef.current = true;
+            console.log('🎯 Host detectado, iniciando WebRTC...', {
+              remoteNickname,
+              hasLocalStream: !!localStream,
+              hasWebRTC: !!startWebRTC,
+            });
+            
+            // Esperar un momento para asegurar que el signaling esté listo
+            setTimeout(() => {
+              if (signalingRef.current) {
+                signalingRef.current.send({
+                  type: 'beat-selected',
+                  beatNumber: selectedBeat,
+                });
+              }
+            }, 500);
+            setTimeout(() => {
+              if (startWebRTC) {
+                console.log('🎯 Host: Llamando startWebRTC después de detectar guest existente');
+                startWebRTC();
+              } else {
+                console.error('❌ Host: startWebRTC no está disponible');
+                webrtcStartedRef.current = false;
+              }
+            }, 1000);
+          }
+        }, 200);
+        
+        // Timeout de seguridad: si después de 5 segundos no hay stream, intentar de todos modos
+        setTimeout(() => {
+          clearInterval(checkLocalStream);
+          if (!webrtcStartedRef.current) {
+            console.warn('⚠️ Host: Timeout esperando stream local, intentando iniciar WebRTC de todos modos...');
+            webrtcStartedRef.current = true;
+            setTimeout(() => {
+              if (startWebRTC) {
+                startWebRTC();
+              }
+            }, 1000);
+          }
+        }, 5000);
+        
+        return () => clearInterval(checkLocalStream);
+      } else {
+        webrtcStartedRef.current = true;
+        console.log('🎯 Host detectado, iniciando WebRTC...', {
+          remoteNickname,
+          hasLocalStream: !!localStream,
+          hasWebRTC: !!startWebRTC,
+        });
+        
+        // Esperar un momento para asegurar que el signaling esté listo
+        setTimeout(() => {
+          if (signalingRef.current) {
+            signalingRef.current.send({
+              type: 'beat-selected',
+              beatNumber: selectedBeat,
+            });
+          }
+        }, 500);
+        setTimeout(() => {
+          if (startWebRTC) {
+            console.log('🎯 Host: Llamando startWebRTC después de detectar guest existente');
+            startWebRTC();
+          } else {
+            console.error('❌ Host: startWebRTC no está disponible');
+            webrtcStartedRef.current = false;
+          }
+        }, 1000);
+      }
     }
-  }, [isHost, remoteNickname, selectedBeat, startWebRTC]);
+  }, [isHost, remoteNickname, selectedBeat, startWebRTC, localStream]);
 
   // Si el guest entra después del host, reenviar user-joined para que el host lo detecte
   // También solicitar al host que reenvíe su user-joined si no lo hemos recibido
@@ -635,9 +694,9 @@ function RoomPageContent() {
   }, [webrtcLocalStream]);
 
   // El audio remoto se reproduce a través del AudioContext en useAudioControls
-  // Solo verificamos que el stream esté disponible y desbloqueamos audio
+  // También asignamos el stream al elemento <audio> como fallback
   useEffect(() => {
-    if (remoteStream) {
+    if (remoteStream && remoteAudioRef.current) {
       console.log('🎧 Stream remoto recibido en componente:', {
         id: remoteStream.id,
         active: remoteStream.active,
@@ -648,6 +707,17 @@ function RoomPageContent() {
           readyState: t.readyState,
         })),
       });
+      
+      // Asignar stream al elemento <audio> como fallback (algunos navegadores lo requieren)
+      if (remoteAudioRef.current.srcObject !== remoteStream) {
+        remoteAudioRef.current.srcObject = remoteStream;
+        console.log('✅ Stream remoto asignado al elemento <audio>');
+        
+        // Intentar reproducir (puede fallar silenciosamente si no hay interacción del usuario)
+        remoteAudioRef.current.play().catch((error) => {
+          console.log('ℹ️ No se pudo reproducir automáticamente (requiere interacción del usuario):', error.message);
+        });
+      }
       
       // Verificar que el stream tenga tracks de audio
       const audioTracks = remoteStream.getAudioTracks();

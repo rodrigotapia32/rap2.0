@@ -261,10 +261,17 @@ export function useAudioControls({
           }
 
           // Crear AnalyserNode para verificar que hay datos de audio fluyendo (solo para diagnóstico)
+          // IMPORTANTE: Conectar el analyser DESPUÉS del remoteGainNode pero ANTES del destination
+          // para no interferir con la conexión principal
           const analyser = audioContextRef.current!.createAnalyser();
           analyser.fftSize = 256;
-          // Conectar el analyser en paralelo al remoteGainNode (no interfiere con la reproducción)
-          remoteGainNodeRef.current!.connect(analyser);
+          // Conectar el analyser en paralelo: remoteGainNode -> analyser -> destination
+          // Esto permite monitorear sin interferir con la reproducción
+          const analyserGain = audioContextRef.current!.createGain();
+          analyserGain.gain.value = 0; // Silenciar el analyser para que no interfiera
+          remoteGainNodeRef.current!.connect(analyserGain);
+          analyserGain.connect(analyser);
+          analyserGain.connect(audioContextRef.current!.destination);
           
           // Verificar que hay datos de audio después de un momento
           setTimeout(() => {
