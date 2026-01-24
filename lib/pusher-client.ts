@@ -34,6 +34,12 @@ export class PusherSignalingClient {
    * Conecta a Pusher
    */
   connect() {
+    console.log('🔌 PusherSignalingClient: Iniciando conexión...', {
+      roomId: this.roomId,
+      userId: this.userId,
+      nickname: this.nickname,
+    });
+    
     const pusherKey = process.env.NEXT_PUBLIC_PUSHER_KEY;
     const pusherCluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER || 'us2';
 
@@ -45,6 +51,11 @@ export class PusherSignalingClient {
       }
       return;
     }
+
+    console.log('✅ Pusher: Clave encontrada, inicializando...', {
+      hasKey: !!pusherKey,
+      cluster: pusherCluster,
+    });
 
     try {
       this.pusher = new Pusher(pusherKey, {
@@ -60,9 +71,13 @@ export class PusherSignalingClient {
         },
       });
 
+      console.log('✅ Pusher: Instancia creada, suscribiendo al canal...');
+
       // Suscribirse al canal de la sala (usando private channel para client events)
       const channelName = `private-room-${this.roomId}`;
       this.channel = this.pusher.subscribe(channelName);
+      
+      console.log('✅ Pusher: Suscrito al canal:', channelName);
 
       // IMPORTANTE: Hacer bindings ANTES de que se complete la suscripción
       // para no perder mensajes que lleguen temprano
