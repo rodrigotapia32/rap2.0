@@ -201,12 +201,14 @@ function RoomPageContent() {
         // Agregar un pequeño delay para dar tiempo a que el guest cargue el beat
         if (isHost && success && signalingRef.current) {
           setTimeout(async () => {
-            try {
-              await signalingRef.current.send({
-                type: 'beat-play',
-              });
-            } catch (error) {
-              console.error('❌ Error enviando beat-play:', error);
+            if (signalingRef.current) {
+              try {
+                await signalingRef.current.send({
+                  type: 'beat-play',
+                });
+              } catch (error) {
+                console.error('❌ Error enviando beat-play:', error);
+              }
             }
           }, 200); // 200ms de delay para dar tiempo a que el guest cargue el beat
         }
