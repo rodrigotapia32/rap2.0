@@ -604,7 +604,7 @@ function RoomPageContent() {
   // Solo verificamos que el stream esté disponible y desbloqueamos audio
   useEffect(() => {
     if (remoteStream) {
-      console.log('🎧 Stream remoto recibido:', {
+      console.log('🎧 Stream remoto recibido en componente:', {
         id: remoteStream.id,
         active: remoteStream.active,
         tracks: remoteStream.getTracks().map(t => ({
@@ -631,6 +631,13 @@ function RoomPageContent() {
         
         // Desbloquear audio cuando recibimos el stream remoto
         unlockAudio();
+        
+        // Verificar que el stream esté realmente activo
+        if (!remoteStream.active) {
+          console.warn('⚠️ Stream remoto no está activo');
+        } else {
+          console.log('✅ Stream remoto está activo');
+        }
       }
       
       // Escuchar cambios en los tracks del stream remoto

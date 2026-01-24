@@ -155,6 +155,13 @@ export function useAudioControls({
         }
 
         try {
+          // Verificar que el AudioContext esté en estado 'running'
+          if (audioContextRef.current!.state !== 'running') {
+            console.warn('⚠️ AudioContext no está en estado running:', audioContextRef.current!.state);
+            await audioContextRef.current!.resume();
+            console.log('✅ AudioContext resumido a estado:', audioContextRef.current!.state);
+          }
+
           const source = audioContextRef.current!.createMediaStreamSource(remoteStream);
           source.connect(remoteGainNodeRef.current!);
           remoteSourceRef.current = source;
@@ -164,7 +171,25 @@ export function useAudioControls({
           console.log('🔊 Estado del nodo de ganancia remoto:', {
             gain: remoteGainNodeRef.current!.gain.value,
             connected: true,
+            audioContextState: audioContextRef.current!.state,
+            destinationConnected: remoteGainNodeRef.current!.numberOfOutputs > 0,
           });
+
+          // Verificar que los tracks estén realmente activos
+          enabledTracks.forEach((track, index) => {
+            console.log(`🎤 Track remoto ${index}:`, {
+              enabled: track.enabled,
+              muted: track.muted,
+              readyState: track.readyState,
+              label: track.label,
+            });
+          });
+
+          // Forzar que el AudioContext esté activo
+          if (audioContextRef.current!.state === 'suspended') {
+            await audioContextRef.current!.resume();
+            console.log('✅ AudioContext activado después de conectar stream remoto');
+          }
         } catch (error) {
           console.error('❌ Error conectando stream remoto al AudioContext:', error);
         }
