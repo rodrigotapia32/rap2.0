@@ -302,11 +302,9 @@ function RoomPageContent() {
             break;
           case 'user-joined':
             if (message.userId !== userIdRef.current) {
-              console.log('🔵 [user-joined] Estableciendo remoteNickname:', message.nickname, 'isHost:', isHost);
               setRemoteNickname(message.nickname);
               // Si es host, enviar el beat seleccionado y iniciar WebRTC (solo una vez)
               if (isHost && signalingRef.current && !webrtcStartedRef.current) {
-                console.log('🔵 [user-joined] Host detectó guest, iniciando WebRTC...');
                 webrtcStartedRef.current = true;
                 setTimeout(() => {
                   if (signalingRef.current) {
@@ -318,10 +316,8 @@ function RoomPageContent() {
                 }, 500);
                 setTimeout(() => {
                   if (startWebRTC) {
-                    console.log('🔵 [user-joined] Llamando startWebRTC...');
                     startWebRTC();
                   } else {
-                    console.warn('⚠️ [user-joined] startWebRTC no está disponible');
                     webrtcStartedRef.current = false;
                   }
                 }, 1000);

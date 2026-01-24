@@ -189,12 +189,10 @@ export function useWebRTC({
   const createOffer = useCallback(async () => {
     const pc = peerConnectionRef.current;
     if (!pc) {
-      console.warn('⚠️ No hay peer connection para crear oferta');
       return;
     }
 
     try {
-      console.log('🔵 Creando oferta WebRTC...');
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: false,

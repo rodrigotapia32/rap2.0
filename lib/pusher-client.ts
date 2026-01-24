@@ -123,14 +123,12 @@ export class PusherSignalingClient {
 
       // Escuchar cuando la suscripción es exitosa
       this.channel.bind('pusher:subscription_succeeded', async () => {
-        console.log('✅ Suscrito al canal de Pusher');
         this.isConnected = true;
         if (this.onConnectionChange) {
           this.onConnectionChange(true);
         }
         
         // Notificar que el usuario se unió usando el servidor (más confiable que client events)
-        console.log('🔵 Enviando user-joined a través del servidor...');
         const channelName = `private-room-${this.roomId}`;
         try {
           const response = await fetch('/api/pusher/trigger', {
@@ -148,10 +146,7 @@ export class PusherSignalingClient {
             }),
           });
 
-          if (response.ok) {
-            console.log('✅ user-joined enviado correctamente a través del servidor');
-          } else {
-            console.warn('⚠️ Error enviando user-joined por servidor, intentando client events...');
+          if (!response.ok) {
             // Fallback a client events
             this.trigger('user-joined', {
               userId: this.userId,
@@ -159,19 +154,18 @@ export class PusherSignalingClient {
             });
           }
         } catch (error) {
-          console.warn('⚠️ Error con servidor, usando client events como fallback:', error);
+          // Fallback a client events
           this.trigger('user-joined', {
             userId: this.userId,
             nickname: this.nickname,
           });
         }
         
-        // Reenviar usando servidor para asegurar que el otro usuario lo reciba (especialmente importante en móvil)
+        // Reenviar usando servidor para asegurar que el otro usuario lo reciba
         let retryCount = 0;
-        const maxRetries = 3; // Reducido porque el servidor es más confiable
+        const maxRetries = 3;
         const retryInterval = setInterval(async () => {
           if (retryCount < maxRetries && this.isConnected) {
-            console.log(`🔵 Reenviando user-joined por servidor (intento ${retryCount + 1}/${maxRetries})...`);
             try {
               await fetch('/api/pusher/trigger', {
                 method: 'POST',
@@ -188,13 +182,13 @@ export class PusherSignalingClient {
                 }),
               });
             } catch (error) {
-              console.warn('⚠️ Error en reenvío:', error);
+              // Silenciar errores de reenvío
             }
             retryCount++;
           } else {
             clearInterval(retryInterval);
           }
-        }, 1500); // Cada 1.5 segundos
+        }, 1500);
       });
 
       // Eventos de conexión
@@ -231,7 +225,6 @@ export class PusherSignalingClient {
    */
   async send(message: SignalingMessage) {
     if (!this.channel || !this.isConnected) {
-      console.warn('⚠️ [Pusher] No está conectado');
       return;
     }
 
