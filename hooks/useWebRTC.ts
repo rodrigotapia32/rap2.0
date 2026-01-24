@@ -233,25 +233,67 @@ export function useWebRTC({
       // Asegurarse de que el stream local esté agregado antes de crear la oferta
       if (localStreamRef.current) {
         const audioTracks = localStreamRef.current.getAudioTracks();
-        if (audioTracks.length > 0 && pc.getSenders().length === 0) {
-          audioTracks.forEach((track) => {
-            // Asegurarse de que el track esté habilitado
-            track.enabled = true;
-            pc.addTrack(track, localStreamRef.current!);
-          });
+        const senders = pc.getSenders();
+        
+        console.log('📤 Host creando oferta:', {
+          tracksDisponibles: audioTracks.length,
+          sendersExistentes: senders.length,
+        });
+        
+        if (audioTracks.length > 0) {
+          // Si no hay senders, agregar los tracks
+          if (senders.length === 0) {
+            console.log('📤 Agregando tracks locales antes de crear oferta (host)');
+            audioTracks.forEach((track) => {
+              // Asegurarse de que el track esté habilitado
+              track.enabled = true;
+              pc.addTrack(track, localStreamRef.current!);
+              console.log('✅ Track local agregado antes de crear oferta:', {
+                enabled: track.enabled,
+                muted: track.muted,
+                readyState: track.readyState,
+              });
+            });
+          } else {
+            // Verificar que los senders tengan tracks
+            console.log('📤 Ya hay senders, verificando tracks:', senders.length);
+            senders.forEach((sender, index) => {
+              if (sender.track) {
+                console.log(`✅ Sender ${index} tiene track:`, {
+                  kind: sender.track.kind,
+                  enabled: sender.track.enabled,
+                  muted: sender.track.muted,
+                  readyState: sender.track.readyState,
+                });
+              } else {
+                console.warn(`⚠️ Sender ${index} no tiene track`);
+              }
+            });
+          }
+        } else {
+          console.warn('⚠️ No hay tracks de audio en el stream local del host');
         }
+      } else {
+        console.warn('⚠️ No hay stream local disponible en el host');
       }
       
       const offer = await pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: false,
       });
+      
+      console.log('📤 Oferta creada:', {
+        type: offer.type,
+        sdp: offer.sdp?.substring(0, 100) + '...',
+      });
+      
       await pc.setLocalDescription(offer);
       if (sendMessageRef.current) {
         sendMessageRef.current({
           type: 'offer',
           offer: offer,
         });
+        console.log('✅ Oferta enviada al guest');
       } else {
         console.error('❌ sendMessageRef.current no está disponible');
       }
