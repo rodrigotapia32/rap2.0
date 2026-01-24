@@ -578,12 +578,21 @@ function RoomPageContent() {
         const audio = document.createElement('audio');
         audio.autoplay = true;
         audio.setAttribute('playsinline', 'true');
+        audio.setAttribute('muted', 'false');
         document.body.appendChild(audio);
         remoteAudioRef.current = audio;
       }
       
+      // Verificar que el stream tenga tracks de audio
+      const audioTracks = remoteStream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        console.warn('⚠️ Stream remoto no tiene tracks de audio');
+        return;
+      }
+      
       // Asignar el stream y reproducir
       remoteAudioRef.current.srcObject = remoteStream;
+      remoteAudioRef.current.volume = 1; // Asegurar que el volumen esté al máximo
       remoteAudioRef.current.play().catch((error) => {
         console.error('❌ Error reproduciendo audio remoto:', error);
       });

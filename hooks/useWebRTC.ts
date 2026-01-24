@@ -134,8 +134,13 @@ export function useWebRTC({
 
     // Manejar stream remoto
     pc.ontrack = (event) => {
-      if (event.streams[0] && onRemoteStream) {
+      // Asegurarse de que hay un stream y tracks
+      if (event.streams && event.streams.length > 0 && onRemoteStream) {
         onRemoteStream(event.streams[0]);
+      } else if (event.track && onRemoteStream) {
+        // Si no hay stream pero hay track, crear uno nuevo
+        const newStream = new MediaStream([event.track]);
+        onRemoteStream(newStream);
       }
     };
 
