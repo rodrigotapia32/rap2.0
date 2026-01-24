@@ -89,12 +89,16 @@ export class PusherSignalingClient {
 
       // Escuchar cuando otros usuarios se unen (desde servidor)
       this.channel.bind('user-joined', (data: { userId: string; nickname: string }) => {
+        console.log('📥 Pusher: Evento user-joined recibido:', data);
         if (data.userId !== this.userId) {
+          console.log('✅ Pusher: user-joined es de otro usuario, procesando...');
           this.onMessage({
             type: 'user-joined',
             userId: data.userId,
             nickname: data.nickname,
           });
+        } else {
+          console.log('⚠️ Pusher: user-joined es del mismo usuario, ignorando');
         }
       });
 
