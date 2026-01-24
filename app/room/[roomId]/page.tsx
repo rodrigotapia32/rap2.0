@@ -484,6 +484,45 @@ function RoomPageContent() {
     }
   }, [isHost, remoteNickname, selectedBeat, startWebRTC]);
 
+  // Si el guest entra después del host, reenviar user-joined para que el host lo detecte
+  // También verificar si el host ya está presente y no hemos recibido su user-joined
+  useEffect(() => {
+    if (!isHost && websocketConnected && !remoteNickname && signalingRef.current) {
+      // Reenviar user-joined después de un breve delay para asegurar que el host lo reciba
+      const retryTimeout = setTimeout(() => {
+        if (signalingRef.current && !remoteNickname) {
+          // Reenviar user-joined a través del servidor
+          const channelName = `private-room-${roomId}`;
+          fetch('/api/pusher/trigger', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              channel: channelName,
+              event: 'user-joined',
+              data: {
+                userId: userIdRef.current,
+                nickname: nickname,
+              },
+            }),
+          }).catch(() => {
+            // Si falla, intentar con client event
+            if (signalingRef.current) {
+              signalingRef.current.send({
+                type: 'user-joined',
+                userId: userIdRef.current,
+                nickname: nickname,
+              });
+            }
+          });
+        }
+      }, 1000);
+      
+      return () => clearTimeout(retryTimeout);
+    }
+  }, [isHost, websocketConnected, remoteNickname, roomId, nickname]);
+
   // Sincronizar stream local
   useEffect(() => {
     setLocalStream(webrtcLocalStream);
