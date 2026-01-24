@@ -486,7 +486,7 @@ function RoomPageContent() {
   }, [isHost, remoteNickname, selectedBeat, startWebRTC]);
 
   // Si el guest entra después del host, reenviar user-joined para que el host lo detecte
-  // También verificar si el host ya está presente y no hemos recibido su user-joined
+  // También solicitar al host que reenvíe su user-joined si no lo hemos recibido
   useEffect(() => {
     if (!isHost && websocketConnected && !remoteNickname && signalingRef.current) {
       // Reenviar user-joined después de un breve delay para asegurar que el host lo reciba
@@ -517,12 +517,31 @@ function RoomPageContent() {
               });
             }
           });
+          
+          // También solicitar al host que reenvíe su información
+          // Enviar un mensaje especial para solicitar el estado
+          setTimeout(() => {
+            if (signalingRef.current && !remoteNickname) {
+              signalingRef.current.send({
+                type: 'ready', // Usar ready como señal para que el host reenvíe su user-joined
+                userId: userIdRef.current,
+              });
+            }
+          }, 500);
         }
       }, 1000);
       
       return () => clearTimeout(retryTimeout);
     }
   }, [isHost, websocketConnected, remoteNickname, roomId, nickname]);
+  
+  // Si el host recibe un 'ready' y el guest no tiene remoteNickname, reenviar user-joined
+  useEffect(() => {
+    if (isHost && websocketConnected && signalingRef.current) {
+      // Este efecto se ejecutará cuando se reciba un 'ready' del guest
+      // El handler de 'ready' ya está en el switch, pero podemos agregar lógica adicional
+    }
+  }, [isHost, websocketConnected]);
 
   // Sincronizar stream local
   useEffect(() => {

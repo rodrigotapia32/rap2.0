@@ -162,8 +162,9 @@ export class PusherSignalingClient {
         }
         
         // Reenviar usando servidor para asegurar que el otro usuario lo reciba
+        // Aumentar retries y frecuencia en móviles para mejor confiabilidad
         let retryCount = 0;
-        const maxRetries = 3;
+        const maxRetries = 5; // Aumentado de 3 a 5
         const retryInterval = setInterval(async () => {
           if (retryCount < maxRetries && this.isConnected) {
             try {
@@ -188,7 +189,7 @@ export class PusherSignalingClient {
           } else {
             clearInterval(retryInterval);
           }
-        }, 1500);
+        }, 1000); // Reducido de 1500ms a 1000ms para más frecuencia
       });
 
       // Eventos de conexión
