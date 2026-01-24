@@ -533,14 +533,12 @@ function RoomPageContent() {
 
     // Solo iniciar countdown si ambos están listos, la batalla no ha empezado, y el countdown no se ha iniciado
     if (isReady && remoteReady && !battleStarted && !countdownStartedRef.current) {
-      console.log('🔵 Iniciando countdown...');
       countdownStartedRef.current = true;
       let count = 3;
       setCountdown(count);
 
       countdownIntervalRef.current = setInterval(() => {
         count--;
-        console.log(`🔵 Countdown: ${count}`);
         if (count > 0) {
           setCountdown(count);
         } else {
@@ -550,7 +548,6 @@ function RoomPageContent() {
             countdownIntervalRef.current = null;
           }
           countdownStartedRef.current = false;
-          console.log('🔵 Countdown terminado');
 
           if (isHost && signalingRef.current) {
             const startTime = Date.now() + 1000;
