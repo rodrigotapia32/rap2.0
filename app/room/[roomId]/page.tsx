@@ -5,8 +5,6 @@ import { useEffect, useState, useRef, Suspense, useCallback } from 'react';
 import { useWebRTC, WebRTCState } from '@/hooks/useWebRTC';
 import { useAudioControls } from '@/hooks/useAudioControls';
 import { useDeviceSelection } from '@/hooks/useDeviceSelection';
-import { useBeatAnalysis } from '@/hooks/useBeatAnalysis';
-import BeatVisualizer from '@/components/BeatVisualizer';
 import { SignalingMessage } from '@/lib/websocket';
 import { PusherSignalingClient } from '@/lib/pusher-client';
 import { audioContextManager } from '@/lib/audio-context-manager';
@@ -84,14 +82,6 @@ function RoomPageContent() {
   } = useDeviceSelection();
 
   const selectedInputIdRef = useRef(selectedInputId);
-
-  // ─── Beat Analysis ───
-  const {
-    analysisResult,
-    spectrogramColumns,
-    totalColumns,
-    isAnalyzing,
-  } = useBeatAnalysis({ beatUrl: `/beats/beat${selectedBeat}.mp3` });
 
   // ─── Beat Playback Helpers ───
   const playBeat = useCallback(async (): Promise<boolean> => {
@@ -814,15 +804,6 @@ function RoomPageContent() {
           </div>
         </div>
       )}
-
-      <BeatVisualizer
-        spectrogramColumns={spectrogramColumns}
-        totalColumns={totalColumns}
-        analysisResult={analysisResult}
-        isAnalyzing={isAnalyzing}
-        beatAudio={beatAudio}
-        isBeatPlaying={isBeatPlaying}
-      />
 
       <div className={styles.controls}>
         <div className={styles.controlGroup}>
