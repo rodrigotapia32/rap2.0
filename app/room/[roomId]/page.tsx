@@ -724,11 +724,14 @@ function RoomPageContent() {
           countdownStartedRef.current = false;
 
           if (isHost && signalingRef.current) {
-            const startTime = Date.now() + 1000;
+            // Reducir el tiempo de inicio para menos delay
+            const startTime = Date.now() + 500; // Reducido de 1000ms a 500ms
             signalingRef.current.send({
               type: 'start-battle',
               timestamp: startTime,
             });
+            // Limpiar countdown justo antes de iniciar la batalla
+            setCountdown(null);
             startBattle(startTime);
           }
         }
@@ -813,7 +816,7 @@ function RoomPageContent() {
         {isReady && !remoteReady && (
           <p className={styles.statusText}>Esperando que el oponente esté listo...</p>
         )}
-        {isReady && remoteReady && countdown !== null && countdown > 0 && (
+        {isReady && remoteReady && countdown !== null && countdown > 0 && !battleStarted && (
           <div className={styles.countdown}>{countdown}</div>
         )}
         {isReady && remoteReady && countdown === 0 && !battleStarted && (
