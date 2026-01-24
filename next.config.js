@@ -7,6 +7,10 @@ const nextConfig = {
     });
     return config;
   },
+  // Configuración para evitar problemas de cache en producción
+  generateBuildId: async () => {
+    return `build-${Date.now()}`;
+  },
 };
 
 module.exports = nextConfig;
