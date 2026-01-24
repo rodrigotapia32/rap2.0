@@ -62,7 +62,17 @@ export function useAudioControls({
       remoteGainNodeRef.current = audioContext.createGain();
       remoteGainNodeRef.current.gain.value = 1.0; // Volumen inicial al máximo
       remoteGainNodeRef.current.connect(audioContext.destination);
-      console.log('✅ Nodo de ganancia remoto creado');
+      console.log('✅ Nodo de ganancia remoto creado y conectado al destination:', {
+        gain: remoteGainNodeRef.current.gain.value,
+        connected: remoteGainNodeRef.current.numberOfOutputs > 0,
+        destination: audioContext.destination,
+      });
+    } else {
+      // Verificar que esté conectado si ya existe
+      if (remoteGainNodeRef.current.numberOfOutputs === 0) {
+        console.warn('⚠️ remoteGainNode existe pero no está conectado, reconectando...');
+        remoteGainNodeRef.current.connect(audioContext.destination);
+      }
     }
 
     if (!micGainNodeRef.current) {
