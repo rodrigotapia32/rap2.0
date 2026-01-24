@@ -301,6 +301,38 @@ function RoomPageContent() {
     }
   };
 
+  /**
+   * Activa o desactiva el micrófono
+   */
+  const toggleMicrophone = () => {
+    if (localStream) {
+      const audioTracks = localStream.getAudioTracks();
+      if (audioTracks.length > 0) {
+        const newMutedState = !isMicMuted;
+        audioTracks.forEach((track) => {
+          track.enabled = newMutedState;
+        });
+        setIsMicMuted(newMutedState);
+      }
+    }
+  };
+
+  /**
+   * Verifica el estado del micrófono
+   */
+  useEffect(() => {
+    if (localStream) {
+      const audioTracks = localStream.getAudioTracks();
+      if (audioTracks.length > 0) {
+        setIsMicMuted(!audioTracks[0].enabled);
+      } else {
+        setIsMicMuted(true); // Si no hay tracks, considerar como muteado
+      }
+    } else {
+      setIsMicMuted(true); // Si no hay stream, considerar como muteado
+    }
+  }, [localStream]);
+
   // Configurar signaling primero (usando Pusher para producción)
   useEffect(() => {
     const signaling = new PusherSignalingClient(
@@ -805,6 +837,11 @@ function RoomPageContent() {
             {!localStream && (
               <p className={styles.statusText} style={{ fontSize: '0.85rem', color: '#f5576c', marginTop: '0.5rem' }}>
                 ⚠️ Micrófono no disponible. Podrás escuchar pero no hablar.
+              </p>
+            )}
+            {localStream && (
+              <p className={styles.statusText} style={{ fontSize: '0.85rem', color: '#10b981', marginTop: '0.5rem' }}>
+                ✅ Micrófono conectado
               </p>
             )}
           </div>
