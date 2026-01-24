@@ -56,11 +56,14 @@ export function useWebRTC({
       if (navigator.permissions && navigator.permissions.query) {
         try {
           permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+          console.log('🎤 Estado de permisos de micrófono:', permissionStatus?.state);
         } catch (e) {
           // La API de permisos no está disponible en todos los navegadores
         }
       }
 
+      console.log('🎤 Intentando obtener stream de micrófono...');
+      
       // Intentar obtener el stream
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -71,8 +74,29 @@ export function useWebRTC({
         video: false,
       });
       
+      console.log('✅ Stream de micrófono obtenido:', {
+        id: stream.id,
+        active: stream.active,
+        tracks: stream.getAudioTracks().length,
+      });
+      
+      // Asegurarse de que el stream se guarde correctamente
       localStreamRef.current = stream;
       setLocalStream(stream);
+      
+      // Verificar que los tracks estén habilitados
+      const audioTracks = stream.getAudioTracks();
+      audioTracks.forEach((track, index) => {
+        console.log(`🎤 Track ${index}:`, {
+          enabled: track.enabled,
+          muted: track.muted,
+          readyState: track.readyState,
+          label: track.label,
+        });
+        // Asegurarse de que el track esté habilitado
+        track.enabled = true;
+      });
+      
       return stream;
     } catch (error: any) {
       console.error('❌ Error accediendo al micrófono:', error);
