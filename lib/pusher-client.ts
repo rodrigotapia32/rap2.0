@@ -23,11 +23,19 @@ export class PusherSignalingClient {
     onMessage: (message: SignalingMessage) => void,
     onConnectionChange?: (connected: boolean) => void
   ) {
+    console.log('🏗️ PusherSignalingClient: Constructor llamado', {
+      roomId,
+      userId,
+      nickname,
+      hasOnMessage: !!onMessage,
+      hasOnConnectionChange: !!onConnectionChange,
+    });
     this.roomId = roomId;
     this.userId = userId;
     this.nickname = nickname;
     this.onMessage = onMessage;
     this.onConnectionChange = onConnectionChange;
+    console.log('✅ PusherSignalingClient: Constructor completado');
   }
 
   /**
