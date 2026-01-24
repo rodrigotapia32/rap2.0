@@ -787,6 +787,18 @@ function RoomPageContent() {
             >
               Beat 2
             </button>
+            <button
+              onClick={() => handleBeatChange(3)}
+              className={`${styles.beatButton} ${selectedBeat === 3 ? styles.beatButtonActive : ''}`}
+            >
+              Beat 3
+            </button>
+            <button
+              onClick={() => handleBeatChange(4)}
+              className={`${styles.beatButton} ${selectedBeat === 4 ? styles.beatButtonActive : ''}`}
+            >
+              Beat 4
+            </button>
           </div>
         </div>
       )}
