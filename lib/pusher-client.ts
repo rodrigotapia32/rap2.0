@@ -123,6 +123,7 @@ export class PusherSignalingClient {
 
       // Escuchar cuando la suscripción es exitosa
       this.channel.bind('pusher:subscription_succeeded', async () => {
+        const channelName = `private-room-${this.roomId}`;
         console.log('✅ Pusher: Suscripción exitosa al canal:', channelName);
         this.isConnected = true;
         if (this.onConnectionChange) {
@@ -130,7 +131,6 @@ export class PusherSignalingClient {
         }
         
         // Notificar que el usuario se unió usando el servidor (más confiable que client events)
-        const channelName = `private-room-${this.roomId}`;
         console.log('📤 Pusher: Enviando user-joined al servidor...', {
           userId: this.userId,
           nickname: this.nickname,
