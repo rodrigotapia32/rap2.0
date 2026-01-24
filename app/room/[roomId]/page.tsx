@@ -22,6 +22,9 @@ function RoomPageContent() {
   }
   const nickname = searchParams.get('nickname') || '';
   const isHost = searchParams.get('isHost') === 'true';
+  
+  // Detectar si es un dispositivo móvil
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
   // Validar roomId (debe ser alfanumérico, 6 caracteres)
   const isValidRoomId = /^[A-Z0-9]{6}$/.test(roomId);
@@ -196,8 +199,11 @@ function RoomPageContent() {
     await unlockAudio();
 
     // Calcular delay basado en el timestamp del servidor
+    // En móviles, agregar un buffer adicional para compensar la latencia
     const now = Date.now();
-    const delay = Math.max(0, serverTimestamp - now);
+    const baseDelay = Math.max(0, serverTimestamp - now);
+    const mobileBuffer = isMobile ? 1000 : 0; // 1 segundo adicional en móviles
+    const delay = baseDelay + mobileBuffer;
 
     setTimeout(async () => {
       const audio = beatAudioRef.current || beatAudio;
@@ -206,19 +212,23 @@ function RoomPageContent() {
         const success = await playBeat();
         
         // Si es host y el beat se reprodujo correctamente, enviar evento al guest
-        // Agregar un pequeño delay para dar tiempo a que el guest cargue el beat
+        // En móviles, esperar más tiempo para asegurar que el guest esté listo
         if (isHost && success && signalingRef.current) {
+          const hostDelay = isMobile ? 500 : 200; // Más delay en móviles
           setTimeout(async () => {
             if (signalingRef.current) {
               try {
+                // Enviar timestamp junto con beat-play para mejor sincronización
+                const playTimestamp = Date.now() + 100; // 100ms en el futuro para dar tiempo
                 await signalingRef.current.send({
                   type: 'beat-play',
+                  timestamp: playTimestamp, // Timestamp para sincronización
                 });
               } catch (error) {
                 console.error('❌ Error enviando beat-play:', error);
               }
             }
-          }, 200); // 200ms de delay para dar tiempo a que el guest cargue el beat
+          }, hostDelay);
         }
       }
     }, delay);
@@ -350,22 +360,33 @@ function RoomPageContent() {
             if (!isHost) {
               // Esperar a que el beat esté cargado si aún no lo está
               const tryPlayBeat = async () => {
-                // Esperar hasta que el beat esté cargado (máximo 3 segundos)
+                // En móviles, esperar más tiempo (máximo 5 segundos)
+                const maxAttempts = isMobile ? 50 : 30; // 50 intentos * 100ms = 5 segundos en móvil
                 let attempts = 0;
-                const maxAttempts = 30; // 30 intentos * 100ms = 3 segundos
                 while ((!beatAudioRef.current || beatAudioRef.current.readyState < 2) && attempts < maxAttempts) {
                   await new Promise(resolve => setTimeout(resolve, 100));
                   attempts++;
                 }
                 
                 if (beatAudioRef.current && beatAudioRef.current.readyState >= 2) {
+                  // Si hay timestamp, calcular delay para sincronización
+                  let playDelay = 0;
+                  if (message.timestamp) {
+                    const now = Date.now();
+                    playDelay = Math.max(0, message.timestamp - now);
+                  }
+                  
                   // Desbloquear audio primero (importante en móvil)
-                  unlockAudio().then(() => {
+                  await unlockAudio();
+                  
+                  // Reproducir con el delay calculado para sincronización
+                  if (playDelay > 0) {
+                    setTimeout(() => {
+                      playBeat();
+                    }, playDelay);
+                  } else {
                     playBeat();
-                  }).catch(() => {
-                    // Intentar reproducir de todas formas
-                    playBeat();
-                  });
+                  }
                 } else {
                   console.error('❌ Beat no está cargado después de esperar. readyState:', beatAudioRef.current?.readyState);
                   // Intentar cargar el beat manualmente si no está listo
@@ -516,8 +537,20 @@ function RoomPageContent() {
     audio.setAttribute('preload', 'auto');
     audio.crossOrigin = 'anonymous';
     
+    // En móviles, precargar más agresivamente
+    if (isMobile) {
+      audio.setAttribute('preload', 'auto');
+    }
+    
     // Cargar el audio antes de establecerlo
     audio.load();
+    
+    // En móviles, esperar a que el audio esté listo antes de continuar
+    if (isMobile) {
+      audio.addEventListener('canplaythrough', () => {
+        // Audio listo para reproducir
+      }, { once: true });
+    }
     
     setBeatAudio(audio);
     beatAudioRef.current = audio; // Actualizar ref también

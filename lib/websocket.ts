@@ -14,7 +14,7 @@ export type SignalingMessage =
   | { type: 'user-joined'; userId: string; nickname: string }
   | { type: 'user-left'; userId: string }
   | { type: 'beat-selected'; beatNumber: number; userId?: string }
-  | { type: 'beat-play'; userId?: string }
+  | { type: 'beat-play'; timestamp?: number; userId?: string }
   | { type: 'beat-pause'; userId?: string }
   | { type: 'beat-restart'; userId?: string };
 
