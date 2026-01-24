@@ -392,13 +392,23 @@ function RoomPageContent() {
             startBattle(message.timestamp);
             break;
           case 'user-joined':
+            console.log('📥 Mensaje user-joined recibido:', {
+              messageUserId: message.userId,
+              currentUserId: userIdRef.current,
+              isHost,
+              webrtcStarted: webrtcStartedRef.current,
+              hasStartWebRTC: !!startWebRTC,
+            });
             if (message.userId !== userIdRef.current) {
+              console.log('✅ user-joined es de otro usuario, estableciendo remoteNickname');
               setRemoteNickname(message.nickname);
               // Si es host, enviar el beat seleccionado y iniciar WebRTC (solo una vez)
               if (isHost && signalingRef.current && !webrtcStartedRef.current) {
+                console.log('🎯 Host detectado, iniciando WebRTC...');
                 webrtcStartedRef.current = true;
                 setTimeout(() => {
                   if (signalingRef.current) {
+                    console.log('📤 Enviando beat-selected al guest');
                     signalingRef.current.send({
                       type: 'beat-selected',
                       beatNumber: selectedBeat,
@@ -414,7 +424,17 @@ function RoomPageContent() {
                     webrtcStartedRef.current = false;
                   }
                 }, 1000);
+              } else {
+                if (!isHost) {
+                  console.log('ℹ️ No es host, esperando oferta del host');
+                } else if (webrtcStartedRef.current) {
+                  console.log('ℹ️ WebRTC ya fue iniciado anteriormente');
+                } else if (!signalingRef.current) {
+                  console.error('❌ signalingRef.current no está disponible');
+                }
               }
+            } else {
+              console.log('⚠️ user-joined es del mismo usuario, ignorando');
             }
             break;
           case 'beat-selected':
