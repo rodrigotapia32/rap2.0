@@ -335,11 +335,19 @@ function RoomPageContent() {
 
   // Configurar signaling primero (usando Pusher para producción)
   useEffect(() => {
+    console.log('🆕 Creando PusherSignalingClient...', {
+      roomId,
+      userId: userIdRef.current,
+      nickname,
+      isHost,
+    });
+    
     const signaling = new PusherSignalingClient(
       roomId,
       userIdRef.current,
       nickname,
       (message: SignalingMessage) => {
+        console.log('📨 Mensaje recibido en handler:', message.type, message);
         // Para beat-play, beat-pause, beat-restart, no filtrar por userId porque pueden no tenerlo
         const isBeatControl = message.type === 'beat-play' || message.type === 'beat-pause' || message.type === 'beat-restart';
         
