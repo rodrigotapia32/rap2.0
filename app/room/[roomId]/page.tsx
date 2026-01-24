@@ -357,14 +357,24 @@ function RoomPageContent() {
             break;
           case 'beat-play':
             // El guest recibe la orden de reproducir el beat
-            console.log('🎵 [beat-play] Evento recibido - isHost:', isHost, 'message.userId:', message.userId, 'mi userId:', userIdRef.current);
+            console.log('🎵 [beat-play] Evento recibido - isHost:', isHost, 'message.userId:', message.userId, 'mi userId:', userIdRef.current, 'beatAudio:', !!beatAudio);
             // El guest siempre debe procesar beat-play del host (no importa el userId)
             if (!isHost) {
               console.log('✅ [beat-play] Procesando orden de reproducir beat (guest)');
+              if (!beatAudio) {
+                console.error('❌ [beat-play] No hay beatAudio disponible en guest');
+                return;
+              }
               // Desbloquear audio primero (importante en móvil)
               unlockAudio().then(() => {
                 console.log('🔵 [beat-play] Audio desbloqueado, reproduciendo...');
-                playBeat();
+                playBeat().then((success) => {
+                  if (success) {
+                    console.log('✅ [beat-play] Beat reproducido correctamente en guest');
+                  } else {
+                    console.error('❌ [beat-play] No se pudo reproducir el beat en guest');
+                  }
+                });
               }).catch((error) => {
                 console.error('❌ [beat-play] Error desbloqueando audio:', error);
                 // Intentar reproducir de todas formas

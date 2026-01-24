@@ -70,8 +70,10 @@ export class PusherSignalingClient {
           // Escuchar mensajes de signaling (client events y server events)
           this.channel.bind('client-signaling', (data: SignalingMessage) => {
             console.log('📥 [Pusher] client-signaling recibido:', data.type, 'userId:', data.userId, 'mi userId:', this.userId);
-            // No procesar nuestros propios mensajes
-            if (data.userId && data.userId === this.userId) {
+            // Para eventos de control de beat, no filtrar por userId (el host controla)
+            const isBeatControl = data.type === 'beat-play' || data.type === 'beat-pause' || data.type === 'beat-restart';
+            // No procesar nuestros propios mensajes (excepto controles de beat)
+            if (!isBeatControl && data.userId && data.userId === this.userId) {
               console.log('🔵 [Pusher] Ignorando mensaje propio');
               return;
             }
