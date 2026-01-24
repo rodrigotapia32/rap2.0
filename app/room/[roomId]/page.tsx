@@ -785,12 +785,6 @@ function RoomPageContent() {
         </div>
       )}
 
-      {!battleStarted && websocketConnected && allPeersConnected && hasPeers && !isReady && (
-        <button onClick={handleReady} className={styles.readyButton}>
-          Estoy listo
-        </button>
-      )}
-
       {isHost && (
         <div className={styles.beatSelector}>
           <label className={styles.label}>Seleccionar beat:</label>
@@ -821,6 +815,12 @@ function RoomPageContent() {
             </button>
           </div>
         </div>
+      )}
+
+      {!battleStarted && websocketConnected && allPeersConnected && hasPeers && !isReady && (
+        <button onClick={handleReady} className={styles.readyButton}>
+          Estoy listo
+        </button>
       )}
 
       {!isHost && (
