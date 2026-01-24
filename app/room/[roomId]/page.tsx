@@ -1009,6 +1009,14 @@ function RoomPageContent() {
           />
         </div>
       </div>
+      
+      {/* Elemento audio oculto para reproducir stream remoto como respaldo */}
+      <audio
+        ref={remoteAudioRef}
+        autoPlay
+        playsInline
+        style={{ display: 'none' }}
+      />
     </div>
   );
 }
