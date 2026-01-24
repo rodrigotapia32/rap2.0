@@ -123,6 +123,7 @@ export class PusherSignalingClient {
 
       // Escuchar cuando la suscripción es exitosa
       this.channel.bind('pusher:subscription_succeeded', async () => {
+        console.log('✅ Pusher: Suscripción exitosa al canal:', channelName);
         this.isConnected = true;
         if (this.onConnectionChange) {
           this.onConnectionChange(true);
@@ -130,6 +131,11 @@ export class PusherSignalingClient {
         
         // Notificar que el usuario se unió usando el servidor (más confiable que client events)
         const channelName = `private-room-${this.roomId}`;
+        console.log('📤 Pusher: Enviando user-joined al servidor...', {
+          userId: this.userId,
+          nickname: this.nickname,
+          channel: channelName,
+        });
         try {
           const response = await fetch('/api/pusher/trigger', {
             method: 'POST',
@@ -146,7 +152,10 @@ export class PusherSignalingClient {
             }),
           });
 
-          if (!response.ok) {
+          if (response.ok) {
+            console.log('✅ Pusher: user-joined enviado exitosamente al servidor');
+          } else {
+            console.warn('⚠️ Pusher: Error al enviar user-joined al servidor, usando fallback');
             // Fallback a client events
             this.trigger('user-joined', {
               userId: this.userId,
@@ -154,6 +163,7 @@ export class PusherSignalingClient {
             });
           }
         } catch (error) {
+          console.error('❌ Pusher: Error al enviar user-joined, usando fallback:', error);
           // Fallback a client events
           this.trigger('user-joined', {
             userId: this.userId,
