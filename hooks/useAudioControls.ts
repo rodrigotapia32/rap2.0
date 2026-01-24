@@ -178,6 +178,13 @@ export function useAudioControls({
             remoteGainNodeRef.current!.connect(audioContextRef.current!.destination);
           }
 
+          // Asegurarse de que el remoteGainNode esté conectado al destination
+          if (remoteGainNodeRef.current!.numberOfOutputs === 0) {
+            console.warn('⚠️ remoteGainNode no está conectado, reconectando...');
+            remoteGainNodeRef.current!.disconnect();
+            remoteGainNodeRef.current!.connect(audioContextRef.current!.destination);
+          }
+
           const source = audioContextRef.current!.createMediaStreamSource(remoteStream);
           source.connect(remoteGainNodeRef.current!);
           remoteSourceRef.current = source;
@@ -190,6 +197,26 @@ export function useAudioControls({
             audioContextState: audioContextRef.current!.state,
             destinationConnected: remoteGainNodeRef.current!.numberOfOutputs > 0,
             sourceConnected: source.numberOfOutputs > 0,
+            sourceChannelCount: source.channelCount,
+            sourceChannelCountMode: source.channelCountMode,
+            gainNodeChannelCount: remoteGainNodeRef.current!.channelCount,
+          });
+          
+          // Verificar que el stream tenga datos activos
+          const activeTracks = remoteStream.getAudioTracks().filter(t => t.readyState === 'live' && t.enabled && !t.muted);
+          console.log('🎵 Tracks activos en stream remoto:', activeTracks.length);
+          
+          // Escuchar eventos de los tracks para verificar que hay datos
+          activeTracks.forEach((track, index) => {
+            track.onended = () => {
+              console.warn(`⚠️ Track remoto ${index} terminó`);
+            };
+            track.onmute = () => {
+              console.warn(`⚠️ Track remoto ${index} fue muteado`);
+            };
+            track.onunmute = () => {
+              console.log(`✅ Track remoto ${index} fue desmuteado`);
+            };
           });
 
           // Verificar que los tracks estén realmente activos
