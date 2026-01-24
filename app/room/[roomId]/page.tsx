@@ -601,7 +601,7 @@ function RoomPageContent() {
 
 
   // El audio remoto se reproduce a través del AudioContext en useAudioControls
-  // Solo verificamos que el stream esté disponible
+  // Solo verificamos que el stream esté disponible y desbloqueamos audio
   useEffect(() => {
     if (remoteStream) {
       console.log('🎧 Stream remoto recibido:', {
@@ -628,6 +628,9 @@ function RoomPageContent() {
         console.warn('⚠️ Todos los tracks de audio remoto están deshabilitados');
       } else {
         console.log(`✅ ${enabledTracks.length} track(s) de audio remoto habilitado(s)`);
+        
+        // Desbloquear audio cuando recibimos el stream remoto
+        unlockAudio();
       }
       
       // Escuchar cambios en los tracks del stream remoto
@@ -640,6 +643,8 @@ function RoomPageContent() {
         };
         track.onunmute = () => {
           console.log('✅ Track de audio remoto fue desmuteado');
+          // Desbloquear audio cuando se desmutea un track
+          unlockAudio();
         };
       });
     }

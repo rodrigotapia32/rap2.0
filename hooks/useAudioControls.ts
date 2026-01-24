@@ -115,43 +115,62 @@ export function useAudioControls({
    */
   useEffect(() => {
     if (remoteStream && audioContextRef.current && remoteGainNodeRef.current) {
-      // Asegurarse de que el AudioContext esté activo
-      if (audioContextRef.current.state === 'suspended') {
-        audioContextRef.current.resume().then(() => {
-          console.log('✅ AudioContext activado para stream remoto');
-        }).catch((error) => {
-          console.error('❌ Error activando AudioContext:', error);
+      const connectStream = async () => {
+        // Asegurarse de que el AudioContext esté activo
+        if (audioContextRef.current!.state === 'suspended') {
+          try {
+            await audioContextRef.current!.resume();
+            console.log('✅ AudioContext activado para stream remoto');
+          } catch (error) {
+            console.error('❌ Error activando AudioContext:', error);
+          }
+        }
+
+        // Limpiar fuente anterior si existe
+        if (remoteSourceRef.current) {
+          remoteSourceRef.current.disconnect();
+          remoteSourceRef.current = null;
+        }
+
+        // Verificar que el stream tenga tracks de audio
+        const audioTracks = remoteStream.getAudioTracks();
+        if (audioTracks.length === 0) {
+          console.warn('⚠️ Stream remoto no tiene tracks de audio para AudioContext');
+          return;
+        }
+
+        const enabledTracks = audioTracks.filter(t => t.enabled);
+        console.log('🎵 Conectando stream remoto al AudioContext:', {
+          streamId: remoteStream.id,
+          streamActive: remoteStream.active,
+          tracks: audioTracks.length,
+          enabledTracks: enabledTracks.length,
+          audioContextState: audioContextRef.current!.state,
+          remoteGainValue: remoteGainNodeRef.current!.gain.value,
         });
-      }
 
-      // Limpiar fuente anterior si existe
-      if (remoteSourceRef.current) {
-        remoteSourceRef.current.disconnect();
-        remoteSourceRef.current = null;
-      }
+        if (enabledTracks.length === 0) {
+          console.warn('⚠️ No hay tracks habilitados en el stream remoto');
+          return;
+        }
 
-      // Verificar que el stream tenga tracks de audio
-      const audioTracks = remoteStream.getAudioTracks();
-      if (audioTracks.length === 0) {
-        console.warn('⚠️ Stream remoto no tiene tracks de audio para AudioContext');
-        return;
-      }
+        try {
+          const source = audioContextRef.current!.createMediaStreamSource(remoteStream);
+          source.connect(remoteGainNodeRef.current!);
+          remoteSourceRef.current = source;
+          console.log('✅ Stream remoto conectado al AudioContext, reproduciendo audio');
+          
+          // Verificar que el nodo de ganancia esté conectado correctamente
+          console.log('🔊 Estado del nodo de ganancia remoto:', {
+            gain: remoteGainNodeRef.current!.gain.value,
+            connected: true,
+          });
+        } catch (error) {
+          console.error('❌ Error conectando stream remoto al AudioContext:', error);
+        }
+      };
 
-      console.log('🎵 Conectando stream remoto al AudioContext:', {
-        streamId: remoteStream.id,
-        tracks: audioTracks.length,
-        enabledTracks: audioTracks.filter(t => t.enabled).length,
-        audioContextState: audioContextRef.current.state,
-      });
-
-      try {
-        const source = audioContextRef.current.createMediaStreamSource(remoteStream);
-        source.connect(remoteGainNodeRef.current);
-        remoteSourceRef.current = source;
-        console.log('✅ Stream remoto conectado al AudioContext');
-      } catch (error) {
-        console.error('❌ Error conectando stream remoto al AudioContext:', error);
-      }
+      connectStream();
     }
 
     return () => {
