@@ -512,9 +512,6 @@ function RoomPageContent() {
     },
     onRemoteStream: (stream) => {
       setRemoteStream(stream);
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = stream;
-      }
     },
     onConnectionStateChange: (state) => {
       // El estado se maneja en useWebRTC con logs apropiados
