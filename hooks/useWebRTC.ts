@@ -56,14 +56,8 @@ export function useWebRTC({
       if (navigator.permissions && navigator.permissions.query) {
         try {
           permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName });
-          if (permissionStatus.state === 'granted') {
-            console.log('✅ Permisos de micrófono ya otorgados');
-          } else if (permissionStatus.state === 'denied') {
-            console.warn('⚠️ Permisos de micrófono denegados previamente');
-          }
         } catch (e) {
           // La API de permisos no está disponible en todos los navegadores
-          console.log('API de permisos no disponible, intentando acceso directo');
         }
       }
 
@@ -79,7 +73,6 @@ export function useWebRTC({
       
       localStreamRef.current = stream;
       setLocalStream(stream);
-      console.log('✅ Stream local obtenido correctamente');
       return stream;
     } catch (error: any) {
       console.error('❌ Error accediendo al micrófono:', error);
@@ -97,19 +90,14 @@ export function useWebRTC({
             const status = await navigator.permissions?.query({ name: 'microphone' as PermissionName });
             if (status?.state === 'denied') {
               alert('Permisos de micrófono denegados.\n\nEn móvil:\n1. Toca el ícono de candado en la barra de direcciones\n2. Permite el acceso al micrófono\n3. Recarga la página\n\nO ve a Configuración del navegador → Permisos → Micrófono');
-            } else {
-              // Probablemente solo canceló el prompt, no mostrar alert
-              console.log('Usuario canceló el prompt, pero permisos pueden estar otorgados');
             }
           } catch (e) {
             // Si no se puede verificar, mostrar el mensaje solo una vez
-            console.warn('⚠️ No se pudo verificar estado de permisos');
           }
         } else {
           alert('Permisos de micrófono denegados.\n\nPor favor:\n1. Haz click en el ícono de candado en la barra de direcciones\n2. Permite el acceso al micrófono\n3. Recarga la página');
         }
         // Continuar sin micrófono (solo escucha)
-        console.warn('⚠️ Continuando sin micrófono (solo modo escucha)');
         return null;
       } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
         alert('No se encontró ningún micrófono. Verifica que tengas un micrófono conectado.');
@@ -135,17 +123,14 @@ export function useWebRTC({
     if (peerConnectionRef.current) {
       const currentState = peerConnectionRef.current.signalingState;
       if (currentState === 'closed') {
-        console.log('🔵 Cerrando peer connection anterior (estado: closed)...');
         peerConnectionRef.current.close();
       } else {
-        console.log('🔵 Peer connection ya existe y está activa (estado:', currentState, '), reutilizando...');
         return; // Reutilizar la conexión existente
       }
     }
     
     const pc = new RTCPeerConnection(rtcConfig);
     peerConnectionRef.current = pc;
-    console.log('🔵 Nueva peer connection creada, signalingState:', pc.signalingState);
 
     // Manejar stream remoto
     pc.ontrack = (event) => {
@@ -165,7 +150,6 @@ export function useWebRTC({
       
       // Solo log estados importantes
       if (state === 'connected') {
-        console.log('✅ Audio conectado!');
       } else if (state === 'failed') {
         console.error('❌ Error de conexión de audio');
       }
@@ -237,7 +221,6 @@ export function useWebRTC({
     
     // Si no hay peer connection, crearla primero
     if (!pc) {
-      console.log('🔵 Guest: No hay peer connection, creando una...');
       createPeerConnection();
       // Esperar un momento para que se establezca
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -295,8 +278,7 @@ export function useWebRTC({
     
     // Si no hay peer connection, crearla primero (puede llegar antes de la oferta)
     if (!pc) {
-      console.log('🔵 No hay peer connection para ICE candidate, creando una...');
-      createPeerConnection();
+        createPeerConnection();
       // Esperar un momento para que se establezca
       await new Promise(resolve => setTimeout(resolve, 100));
       pc = peerConnectionRef.current;
@@ -313,7 +295,6 @@ export function useWebRTC({
     } catch (error: any) {
       // Si el error es porque la descripción remota no está establecida, guardarlo en la cola
       if (error.name === 'InvalidStateError' && pc.remoteDescription === null) {
-        console.log('🔵 ICE candidate llegó antes de la descripción remota, guardando en cola...');
         pendingIceCandidatesRef.current.push(candidate);
       } else {
         console.error('❌ Error agregando ICE candidate:', error);
@@ -354,7 +335,6 @@ export function useWebRTC({
           // Fallback: esperar un delay si waitForRemote no está habilitado
           setTimeout(() => {
             if (mounted && peerConnectionRef.current) {
-              console.log('🔵 Iniciando WebRTC...');
               createOffer();
             }
           }, 2000);
@@ -369,7 +349,6 @@ export function useWebRTC({
       // Solo limpiar si realmente creamos la conexión en este efecto
       // No limpiar si la conexión se creó en otro lugar (como startWebRTC)
       if (peerConnectionCreated && peerConnectionRef.current) {
-        console.log('🔵 Limpiando peer connection del useEffect...');
         peerConnectionRef.current.close();
         peerConnectionRef.current = null;
       }
@@ -402,35 +381,19 @@ export function useWebRTC({
 
   // Exponer función para crear oferta manualmente (cuando el remoto esté listo)
   const startWebRTC = useCallback(() => {
-    console.log('🔵 startWebRTC llamado, verificando condiciones...');
-    console.log('  - isHost:', isHost);
-    console.log('  - peerConnectionRef.current:', !!peerConnectionRef.current);
-    if (peerConnectionRef.current) {
-      console.log('  - signalingState:', peerConnectionRef.current.signalingState);
-      console.log('  - connectionState:', peerConnectionRef.current.connectionState);
-    }
-    console.log('  - sendMessageRef.current:', !!sendMessageRef.current);
-    
     if (!isHost) {
-      console.warn('⚠️ startWebRTC llamado pero no es host');
       return;
     }
     
     // Si no hay peer connection, crearla primero
     if (!peerConnectionRef.current) {
-      console.log('🔵 Creando peer connection...');
       createPeerConnection();
       // Esperar un momento para que se establezca
       setTimeout(() => {
         const pc = peerConnectionRef.current;
         if (pc && sendMessageRef.current) {
-          console.log('🔵 Peer connection creada, verificando estado...');
-          console.log('  - signalingState:', pc.signalingState);
-          console.log('  - connectionState:', pc.connectionState);
-          
           // Verificar que la conexión no esté cerrada
           if (pc.signalingState === 'closed') {
-            console.error('❌ Peer connection está cerrada, recreando...');
             createPeerConnection();
             setTimeout(() => {
               if (peerConnectionRef.current && sendMessageRef.current) {
@@ -440,19 +403,15 @@ export function useWebRTC({
             return;
           }
           
-          console.log('🔵 Estado válido, creando oferta...');
           createOffer();
-        } else {
-          console.error('❌ No se pudo crear peer connection o sendMessage no disponible');
         }
-      }, 200); // Aumentado a 200ms para dar más tiempo
+      }, 200);
       return;
     }
     
     // Verificar que la conexión existente no esté cerrada
     const pc = peerConnectionRef.current;
     if (pc.signalingState === 'closed') {
-      console.error('❌ Peer connection está cerrada, recreando...');
       createPeerConnection();
       setTimeout(() => {
         if (peerConnectionRef.current && sendMessageRef.current) {
@@ -463,11 +422,9 @@ export function useWebRTC({
     }
     
     if (!sendMessageRef.current) {
-      console.error('❌ No hay función de envío disponible');
       return;
     }
     
-    console.log('🔵 Todas las condiciones cumplidas, creando oferta...');
     createOffer();
   }, [isHost, createOffer, createPeerConnection]);
 

@@ -69,12 +69,10 @@ export class PusherSignalingClient {
 
           // Escuchar mensajes de signaling (client events y server events)
           this.channel.bind('client-signaling', (data: SignalingMessage) => {
-            console.log('📥 [Pusher] client-signaling recibido:', data.type, 'userId:', data.userId, 'mi userId:', this.userId);
             // Para eventos de control de beat, no filtrar por userId (el host controla)
             const isBeatControl = data.type === 'beat-play' || data.type === 'beat-pause' || data.type === 'beat-restart';
             // No procesar nuestros propios mensajes (excepto controles de beat)
             if (!isBeatControl && data.userId && data.userId === this.userId) {
-              console.log('🔵 [Pusher] Ignorando mensaje propio');
               return;
             }
             this.onMessage(data);
@@ -91,9 +89,7 @@ export class PusherSignalingClient {
 
       // Escuchar cuando otros usuarios se unen (desde servidor)
       this.channel.bind('user-joined', (data: { userId: string; nickname: string }) => {
-        console.log('🔵 Recibido user-joined (servidor):', data);
         if (data.userId !== this.userId) {
-          console.log('🔵 Procesando user-joined de otro usuario');
           this.onMessage({
             type: 'user-joined',
             userId: data.userId,
@@ -279,12 +275,7 @@ export class PusherSignalingClient {
         }
       } else {
         // Para otros mensajes (ready, beat-selected, beat-play, etc), usar client events
-        const triggered = this.trigger('signaling', messageWithUser);
-        if (triggered) {
-          console.log('✅ [Pusher] Mensaje enviado (client event):', message.type);
-        } else {
-          console.error('❌ [Pusher] No se pudo enviar mensaje (client event):', message.type);
-        }
+        this.trigger('signaling', messageWithUser);
       }
     } catch (error) {
       console.error('❌ [Pusher] Error enviando mensaje:', error);

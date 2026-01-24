@@ -122,41 +122,34 @@ function RoomPageContent() {
    * Reproduce el beat (usado internamente y por eventos remotos)
    */
   const playBeat = async (): Promise<boolean> => {
-    console.log('🎵 [playBeat] Iniciando reproducción, beatAudio:', !!beatAudio, 'isHost:', isHost);
     if (!beatAudio) {
-      console.error('❌ [playBeat] No hay beatAudio disponible');
       return false;
     }
 
     try {
       // Asegurarse de que el AudioContext esté activo
       if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-        console.log('🔵 [playBeat] AudioContext suspendido, resumiendo...');
         await audioContextRef.current.resume();
       }
 
-      console.log('🔵 [playBeat] Intentando reproducir, currentTime:', beatAudio.currentTime);
       const playPromise = beatAudio.play();
       if (playPromise !== undefined) {
         await playPromise;
-        console.log('✅ [playBeat] Beat reproducido correctamente, estado:', beatAudio.paused ? 'pausado' : 'reproduciendo');
         setIsBeatPlaying(true);
         return true;
       }
-      console.warn('⚠️ [playBeat] playPromise es undefined');
       return false;
     } catch (error: any) {
-      console.error('❌ [playBeat] Error reproduciendo beat:', error.name, error.message);
+      console.error('❌ Error reproduciendo beat:', error);
       // Intentar activar AudioContext una vez más
       if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
         try {
           await audioContextRef.current.resume();
-          console.log('✅ [playBeat] AudioContext reactivado, reintentando...');
           await beatAudio.play();
           setIsBeatPlaying(true);
           return true;
         } catch (e: any) {
-          console.error('❌ [playBeat] Error después de reactivar AudioContext:', e.name, e.message);
+          console.error('❌ Error después de reactivar AudioContext:', e);
         }
       }
       return false;
@@ -167,11 +160,9 @@ function RoomPageContent() {
    * Pausa el beat (usado internamente y por eventos remotos)
    */
   const pauseBeat = () => {
-    console.log('⏸️ [pauseBeat] Pausando beat, beatAudio:', !!beatAudio, 'isHost:', isHost);
     if (beatAudio) {
       beatAudio.pause();
       setIsBeatPlaying(false);
-      console.log('✅ [pauseBeat] Beat pausado correctamente');
     }
   };
 
@@ -184,7 +175,6 @@ function RoomPageContent() {
       if (!isBeatPlaying) {
         await playBeat();
       }
-      console.log('🔄 Beat reiniciado');
     }
   };
 
@@ -203,28 +193,20 @@ function RoomPageContent() {
     const delay = Math.max(0, serverTimestamp - now);
 
     setTimeout(async () => {
-      console.log('🔵 [startBattle] Iniciando beat, delay:', delay, 'beatAudio:', !!beatAudio, 'isHost:', isHost);
       if (beatAudio) {
         beatAudio.currentTime = 0;
         const success = await playBeat();
-        console.log('🔵 [startBattle] playBeat resultado:', success, 'isHost:', isHost);
         
         // Si es host y el beat se reprodujo correctamente, enviar evento al guest
         if (isHost && success && signalingRef.current) {
-          console.log('🔵 [startBattle] Host: Enviando beat-play al guest');
           try {
             await signalingRef.current.send({
               type: 'beat-play',
             });
-            console.log('✅ [startBattle] beat-play enviado correctamente');
           } catch (error) {
-            console.error('❌ [startBattle] Error enviando beat-play:', error);
+            console.error('❌ Error enviando beat-play:', error);
           }
-        } else {
-          console.log('⚠️ [startBattle] No se envió beat-play - isHost:', isHost, 'success:', success, 'signaling:', !!signalingRef.current);
         }
-      } else {
-        console.error('❌ [startBattle] No hay beatAudio disponible');
       }
     }, delay);
   };
@@ -295,14 +277,11 @@ function RoomPageContent() {
       userIdRef.current,
       nickname,
       (message: SignalingMessage) => {
-        console.log('📨 [signaling] Mensaje recibido:', message.type, 'userId:', message.userId, 'mi userId:', userIdRef.current, 'isHost:', isHost);
-        
         // Para beat-play, beat-pause, beat-restart, no filtrar por userId porque pueden no tenerlo
         const isBeatControl = message.type === 'beat-play' || message.type === 'beat-pause' || message.type === 'beat-restart';
         
         // Filtrar nuestros propios mensajes (excepto user-joined y controles de beat que se manejan diferente)
         if (message.type !== 'user-joined' && !isBeatControl && message.userId === userIdRef.current) {
-          console.log('🔵 [signaling] Ignorando mensaje propio');
           return;
         }
 
@@ -357,44 +336,25 @@ function RoomPageContent() {
             break;
           case 'beat-play':
             // El guest recibe la orden de reproducir el beat
-            console.log('🎵 [beat-play] Evento recibido - isHost:', isHost, 'message.userId:', message.userId, 'mi userId:', userIdRef.current, 'beatAudio:', !!beatAudio);
-            // El guest siempre debe procesar beat-play del host (no importa el userId)
-            if (!isHost) {
-              console.log('✅ [beat-play] Procesando orden de reproducir beat (guest)');
-              if (!beatAudio) {
-                console.error('❌ [beat-play] No hay beatAudio disponible en guest');
-                return;
-              }
+            if (!isHost && beatAudio) {
               // Desbloquear audio primero (importante en móvil)
               unlockAudio().then(() => {
-                console.log('🔵 [beat-play] Audio desbloqueado, reproduciendo...');
-                playBeat().then((success) => {
-                  if (success) {
-                    console.log('✅ [beat-play] Beat reproducido correctamente en guest');
-                  } else {
-                    console.error('❌ [beat-play] No se pudo reproducir el beat en guest');
-                  }
-                });
-              }).catch((error) => {
-                console.error('❌ [beat-play] Error desbloqueando audio:', error);
+                playBeat();
+              }).catch(() => {
                 // Intentar reproducir de todas formas
                 playBeat();
               });
-            } else {
-              console.log('⚠️ [beat-play] Ignorado - es host, no debe procesar su propio mensaje');
             }
             break;
           case 'beat-pause':
             // El guest recibe la orden de pausar el beat
             if (!isHost) {
-              console.log('🔵 [beat-pause] Recibida orden de pausar beat (guest)');
               pauseBeat();
             }
             break;
           case 'beat-restart':
             // El guest recibe la orden de reiniciar el beat
             if (!isHost) {
-              console.log('🔵 [beat-restart] Recibida orden de reiniciar beat (guest)');
               restartBeatInternal();
             }
             break;
@@ -445,7 +405,6 @@ function RoomPageContent() {
   // Necesitamos verificar si ya hay un remoteNickname y iniciar WebRTC
   useEffect(() => {
     if (isHost && remoteNickname && !webrtcStartedRef.current && signalingRef.current && startWebRTC) {
-      console.log('🔵 [useEffect] Host detectó guest existente (remoteNickname:', remoteNickname, '), iniciando WebRTC...');
       webrtcStartedRef.current = true;
       setTimeout(() => {
         if (signalingRef.current) {
@@ -457,10 +416,8 @@ function RoomPageContent() {
       }, 500);
       setTimeout(() => {
         if (startWebRTC) {
-          console.log('🔵 [useEffect] Llamando startWebRTC...');
           startWebRTC();
         } else {
-          console.warn('⚠️ [useEffect] startWebRTC no está disponible');
           webrtcStartedRef.current = false;
         }
       }, 1000);
