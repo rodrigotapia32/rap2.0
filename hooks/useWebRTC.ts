@@ -34,17 +34,69 @@ export function useWebRTC({
   const sendMessageRef = useRef(sendSignalingMessage);
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]); // Cola de ICE candidates pendientes
 
-  // Configuración STUN (público de Google)
-  // Para localhost, también agregamos configuración sin STUN para conexiones locales
-  const rtcConfig: RTCConfiguration = {
+  // Función para generar credenciales efímeras para TURN
+  const generateTurnCredentials = async (): Promise<{ username: string; credential: string }> => {
+    const TURN_SECRET = 'c94829d333246d94536a2c2df3e8a71ee9d709f6ac50cc7a75c355b863a82575';
+    const TURN_USERNAME = 'rap2.0'; // Username fijo o timestamp
+    
+    // Generar timestamp (válido por 24 horas)
+    const timestamp = Math.floor(Date.now() / 1000) + (24 * 3600);
+    const username = `${timestamp}:${TURN_USERNAME}`;
+    
+    try {
+      // Generar HMAC-SHA1 usando Web Crypto API
+      const encoder = new TextEncoder();
+      const keyData = encoder.encode(TURN_SECRET);
+      const messageData = encoder.encode(username);
+      
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        keyData,
+        { name: 'HMAC', hash: 'SHA-1' },
+        false,
+        ['sign']
+      );
+      
+      const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+      const credential = btoa(String.fromCharCode(...new Uint8Array(signature)));
+      
+      return { username, credential };
+    } catch (error) {
+      // Fallback: usar secret directamente como password (si el servidor lo permite)
+      console.warn('⚠️ No se pudo generar credenciales efímeras, usando secret directo');
+      return { username: TURN_USERNAME, credential: TURN_SECRET };
+    }
+  };
+
+  // Configuración STUN/TURN
+  // Incluye servidores públicos de Google y servidor TURN privado
+  const [rtcConfig, setRtcConfig] = useState<RTCConfiguration>({
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
-      // Para conexiones en el mismo PC (localhost), esto ayuda
       { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:159.89.54.229:3478' },
     ],
-    // Configuración adicional para mejorar conexiones locales
     iceCandidatePoolSize: 10,
-  };
+  });
+
+  // Generar credenciales TURN y actualizar configuración
+  useEffect(() => {
+    generateTurnCredentials().then(({ username, credential }) => {
+      setRtcConfig({
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:159.89.54.229:3478' },
+          {
+            urls: 'turn:159.89.54.229:3478',
+            username,
+            credential,
+          },
+        ],
+        iceCandidatePoolSize: 10,
+      });
+    });
+  }, []);
 
   /**
    * Inicializa el stream local (micrófono)
