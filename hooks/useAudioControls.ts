@@ -245,16 +245,40 @@ export function useAudioControls({
             console.log('✅ AudioContext activado después de conectar stream remoto');
           }
 
-          // Verificar conexión después de un momento
+          // Crear AnalyserNode para verificar que hay datos de audio fluyendo
+          const analyser = audioContextRef.current!.createAnalyser();
+          analyser.fftSize = 256;
+          const analyserGain = audioContextRef.current!.createGain();
+          analyserGain.gain.value = 1.0;
+          remoteGainNodeRef.current!.connect(analyserGain);
+          analyserGain.connect(analyser);
+          analyser.connect(audioContextRef.current!.destination);
+          
+          // Verificar que hay datos de audio después de un momento
           setTimeout(() => {
             if (remoteSourceRef.current && remoteGainNodeRef.current) {
+              const dataArray = new Uint8Array(analyser.frequencyBinCount);
+              analyser.getByteFrequencyData(dataArray);
+              const maxAmplitude = Math.max(...dataArray);
+              const avgAmplitude = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+              
               console.log('🔍 Verificación después de conectar:', {
                 sourceOutputs: remoteSourceRef.current.numberOfOutputs,
                 gainNodeOutputs: remoteGainNodeRef.current.numberOfOutputs,
                 audioContextState: audioContextRef.current!.state,
+                maxAmplitude: maxAmplitude,
+                avgAmplitude: avgAmplitude.toFixed(2),
+                hasAudioData: maxAmplitude > 0,
               });
+              
+              if (maxAmplitude === 0) {
+                console.warn('⚠️ No se detectan datos de audio en el stream remoto');
+                console.warn('💡 Esto podría indicar que el micrófono del oponente no está transmitiendo datos');
+              } else {
+                console.log('✅ Se detectan datos de audio en el stream remoto');
+              }
             }
-          }, 500);
+          }, 1000);
         } catch (error) {
           console.error('❌ Error conectando stream remoto al AudioContext:', error);
         }
