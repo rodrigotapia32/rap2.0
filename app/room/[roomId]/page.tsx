@@ -204,6 +204,10 @@ function RoomPageContent() {
   // Sync local stream
   useEffect(() => {
     setLocalStream(webrtcLocalStream);
+    // Intentar desbloquear AudioContext cuando el stream local está listo
+    if (webrtcLocalStream) {
+      audioContextManager.tryResume();
+    }
   }, [webrtcLocalStream]);
 
   // ─── Audio Controls ───
@@ -417,7 +421,13 @@ function RoomPageContent() {
     signaling.connect();
 
     // Initialize local stream early (parallel with signaling)
-    initializeLocalStreamRef.current?.(selectedInputIdRef.current || undefined);
+    (async () => {
+      const stream = await initializeLocalStreamRef.current?.(selectedInputIdRef.current || undefined);
+      // Intentar desbloquear AudioContext después de inicializar el stream
+      if (stream) {
+        await audioContextManager.tryResume();
+      }
+    })();
 
     return () => {
       signaling.disconnect();
@@ -480,6 +490,14 @@ function RoomPageContent() {
       userId: userIdRef.current,
     });
   }, [isReady]);
+
+  // ─── Handle Click to Unlock AudioContext ───
+  const handleContainerClick = useCallback(async () => {
+    // Intentar desbloquear AudioContext con gesto del usuario
+    if (!audioContextManager.isUnlocked()) {
+      await audioContextManager.unlockFromGesture();
+    }
+  }, []);
 
   // ─── Microphone Toggle ───
   const toggleMicrophone = useCallback(() => {
@@ -690,7 +708,7 @@ function RoomPageContent() {
   }
 
   return (
-    <div className={styles.container}>
+    <div className={styles.container} onClick={handleContainerClick}>
       <div className={styles.header}>
         <h1 className={styles.title}>Sala: {roomId}</h1>
         <div className={styles.players}>
