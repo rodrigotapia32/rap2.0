@@ -1,7 +1,7 @@
 /**
  * Hook for controlling audio volumes using Web Audio API.
  * Uses the shared audioContextManager singleton for AudioContext lifecycle.
- * Routes multiple remote audio streams through a shared GainNode -> speakers.
+ * Routes multiple remote audio streams through individual GainNodes -> speakers.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -19,38 +19,39 @@ export function useAudioControls({
   beatAudio,
 }: UseAudioControlsOptions) {
   const [beatVolume, setBeatVolume] = useState(0.5);
-  const [micVolume, setMicVolume] = useState(1.0);
-  const [remoteVolume, setRemoteVolume] = useState(1.0);
+  const [remoteVolumes, setRemoteVolumes] = useState<Map<string, number>>(new Map());
   const [remoteAudioActive, setRemoteAudioActive] = useState(false);
 
-  const remoteGainNodeRef = useRef<GainNode | null>(null);
+  const remoteGainNodesRef = useRef<Map<string, GainNode>>(new Map());
   const micSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const remoteSourcesRef = useRef<Map<string, MediaStreamAudioSourceNode>>(new Map());
   const remoteStreamsRef = useRef<Map<string, MediaStream>>(new Map());
   const unsubUnlockRef = useRef<(() => void) | null>(null);
 
   /**
-   * Ensure the shared remote gain node exists
+   * Ensure a gain node exists for a specific peer
    */
-  const ensureGainNode = useCallback((): GainNode | null => {
-    if (remoteGainNodeRef.current) return remoteGainNodeRef.current;
+  const ensurePeerGainNode = useCallback((userId: string): GainNode | null => {
+    let gainNode = remoteGainNodesRef.current.get(userId);
+    if (gainNode) return gainNode;
 
     const ctx = audioContextManager.getContext();
     const gain = ctx.createGain();
-    gain.gain.value = remoteVolume;
+    // Initialize volume to 1.0 (100%) for new peers
+    gain.gain.value = remoteVolumes.get(userId) ?? 1.0;
     gain.connect(ctx.destination);
-    remoteGainNodeRef.current = gain;
+    remoteGainNodesRef.current.set(userId, gain);
     return gain;
-  }, [remoteVolume]);
+  }, [remoteVolumes]);
 
   /**
-   * Connect a single remote stream to the shared gain node
+   * Connect a single remote stream to its individual gain node
    */
   const connectPeerStream = useCallback((userId: string, stream: MediaStream) => {
     const audioTracks = stream.getAudioTracks();
     if (audioTracks.length === 0) return;
 
-    const gainNode = ensureGainNode();
+    const gainNode = ensurePeerGainNode(userId);
     if (!gainNode) return;
 
     // Disconnect previous source for this peer if any
@@ -82,10 +83,10 @@ export function useAudioControls({
         setRemoteAudioActive(true);
       };
     }
-  }, [ensureGainNode]);
+  }, [ensurePeerGainNode]);
 
   /**
-   * Disconnect a single peer's audio source
+   * Disconnect a single peer's audio source and clean up gain node
    */
   const disconnectPeerStream = useCallback((userId: string) => {
     const source = remoteSourcesRef.current.get(userId);
@@ -93,6 +94,13 @@ export function useAudioControls({
       try { source.disconnect(); } catch { /* noop */ }
       remoteSourcesRef.current.delete(userId);
     }
+    
+    const gainNode = remoteGainNodesRef.current.get(userId);
+    if (gainNode) {
+      try { gainNode.disconnect(); } catch { /* noop */ }
+      remoteGainNodesRef.current.delete(userId);
+    }
+    
     updateActiveState();
   }, []);
 
@@ -111,6 +119,17 @@ export function useAudioControls({
       connectPeerStream(userId, stream);
     }
   }, [connectPeerStream]);
+
+  /**
+   * Set volume for a specific peer
+   */
+  const setRemoteVolume = useCallback((userId: string, volume: number) => {
+    setRemoteVolumes(prev => {
+      const next = new Map(prev);
+      next.set(userId, volume);
+      return next;
+    });
+  }, []);
 
   /**
    * Register onUnlocked callback to reconnect streams after AudioContext resumes
@@ -132,25 +151,28 @@ export function useAudioControls({
   // Do NOT set beatAudio.volume here — it's multiplicative with the GainNode.
 
   /**
-   * Mic volume control
+   * Mic always enabled (maximum volume)
    */
   useEffect(() => {
     if (localStream) {
       const audioTracks = localStream.getAudioTracks();
       for (const track of audioTracks) {
-        track.enabled = micVolume > 0;
+        track.enabled = true;
       }
     }
-  }, [localStream, micVolume]);
+  }, [localStream]);
 
   /**
-   * Remote volume control - applies to shared gain node
+   * Remote volume control - applies to individual gain nodes
    */
   useEffect(() => {
-    if (remoteGainNodeRef.current) {
-      remoteGainNodeRef.current.gain.value = remoteVolume;
+    for (const [userId, volume] of remoteVolumes) {
+      const gainNode = remoteGainNodesRef.current.get(userId);
+      if (gainNode) {
+        gainNode.gain.value = volume;
+      }
     }
-  }, [remoteVolume]);
+  }, [remoteVolumes]);
 
   /**
    * Sync remote streams map: connect new, disconnect removed
@@ -163,6 +185,12 @@ export function useAudioControls({
     for (const [userId] of prevStreams) {
       if (!nextStreams.has(userId)) {
         disconnectPeerStream(userId);
+        // Clean up volume for disconnected peer
+        setRemoteVolumes(prev => {
+          const next = new Map(prev);
+          next.delete(userId);
+          return next;
+        });
       }
     }
 
@@ -170,6 +198,16 @@ export function useAudioControls({
     for (const [userId, stream] of nextStreams) {
       const prev = prevStreams.get(userId);
       if (prev !== stream) {
+        // Initialize volume to 1.0 for new peers
+        if (!prevStreams.has(userId)) {
+          setRemoteVolumes(prev => {
+            const next = new Map(prev);
+            if (!next.has(userId)) {
+              next.set(userId, 1.0);
+            }
+            return next;
+          });
+        }
         if (audioContextManager.isUnlocked()) {
           connectPeerStream(userId, stream);
         } else {
@@ -186,6 +224,7 @@ export function useAudioControls({
 
   /**
    * Connect local stream for mic monitoring (NOT to destination - prevents feedback)
+   * Mic always enabled (maximum volume)
    */
   useEffect(() => {
     if (!localStream) {
@@ -198,7 +237,7 @@ export function useAudioControls({
 
     const audioTracks = localStream.getAudioTracks();
     for (const track of audioTracks) {
-      track.enabled = micVolume > 0;
+      track.enabled = true;
     }
 
     return () => {
@@ -207,7 +246,7 @@ export function useAudioControls({
         micSourceRef.current = null;
       }
     };
-  }, [localStream, micVolume]);
+  }, [localStream]);
 
   /**
    * Cleanup on unmount
@@ -218,9 +257,10 @@ export function useAudioControls({
         try { source.disconnect(); } catch { /* noop */ }
       }
       remoteSourcesRef.current.clear();
-      if (remoteGainNodeRef.current) {
-        try { remoteGainNodeRef.current.disconnect(); } catch { /* noop */ }
+      for (const [, gainNode] of remoteGainNodesRef.current) {
+        try { gainNode.disconnect(); } catch { /* noop */ }
       }
+      remoteGainNodesRef.current.clear();
       if (micSourceRef.current) {
         try { micSourceRef.current.disconnect(); } catch { /* noop */ }
       }
@@ -230,9 +270,7 @@ export function useAudioControls({
   return {
     beatVolume,
     setBeatVolume,
-    micVolume,
-    setMicVolume,
-    remoteVolume,
+    remoteVolumes,
     setRemoteVolume,
     remoteAudioActive,
   };

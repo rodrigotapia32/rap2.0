@@ -60,6 +60,48 @@
   margin-left: 0.25rem;
 }
 
+.playerVolumeControl {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.playerVolumeSlider {
+  width: 80px;
+  height: 6px;
+  border-radius: 3px;
+  background: #333;
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.playerVolumeSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+}
+
+.playerVolumeSlider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #667eea;
+  cursor: pointer;
+  border: none;
+}
+
+.playerVolumeLabel {
+  color: #888;
+  font-size: 0.75rem;
+  min-width: 35px;
+  text-align: right;
+}
+
 .waiting {
   color: #888;
   font-style: italic;

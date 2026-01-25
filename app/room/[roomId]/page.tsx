@@ -214,9 +214,7 @@ function RoomPageContent() {
   const {
     beatVolume,
     setBeatVolume,
-    micVolume,
-    setMicVolume,
-    remoteVolume,
+    remoteVolumes,
     setRemoteVolume,
     remoteAudioActive,
   } = useAudioControls({
@@ -723,6 +721,23 @@ function RoomPageContent() {
               <span className={styles.playerName}>{peer.nickname}</span>
               {peer.isReady && <span className={styles.readyBadge}>&#10003; Listo</span>}
               {peer.connectionState === 'connected' && <span className={styles.connectedBadge}>&#128266;</span>}
+              {peer.connectionState === 'connected' && (
+                <div className={styles.playerVolumeControl}>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={remoteVolumes.get(peer.userId) ?? 1}
+                    onChange={(e) => setRemoteVolume(peer.userId, parseFloat(e.target.value))}
+                    onTouchStart={() => audioContextManager.unlockFromGesture()}
+                    className={styles.playerVolumeSlider}
+                  />
+                  <span className={styles.playerVolumeLabel}>
+                    {Math.round((remoteVolumes.get(peer.userId) ?? 1) * 100)}%
+                  </span>
+                </div>
+              )}
             </div>
           ))}
           {peers.size === 0 && (
@@ -870,36 +885,6 @@ function RoomPageContent() {
           />
         </div>
 
-        <div className={styles.controlGroup}>
-          <label className={styles.controlLabel}>
-            Volumen Microfono: {Math.round(micVolume * 100)}%
-          </label>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={micVolume}
-            onChange={(e) => setMicVolume(parseFloat(e.target.value))}
-            className={styles.slider}
-          />
-        </div>
-
-        <div className={styles.controlGroup}>
-          <label className={styles.controlLabel}>
-            Volumen Rivales: {Math.round(remoteVolume * 100)}%
-          </label>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={remoteVolume}
-            onChange={(e) => setRemoteVolume(parseFloat(e.target.value))}
-            onTouchStart={() => audioContextManager.unlockFromGesture()}
-            className={styles.slider}
-          />
-        </div>
 
         {audioInputs.length > 0 && (
           <div className={styles.controlGroup}>
