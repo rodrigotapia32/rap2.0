@@ -1086,10 +1086,8 @@ function RoomPageContent() {
                   type: 'cachipum-winner',
                   winnerId: winner,
                 });
-                // Iniciar animación de rondas para el host
-                setCurrentCachipumRoundDisplay(0);
+                // Mostrar modal con todas las rondas
                 setShowCachipumAnimation(true);
-                startCachipumAnimation(results, winner);
               } else {
                 // Si hay empate en las 3 rondas, reiniciar cachipum
                 setCachipumChoices(new Map());
