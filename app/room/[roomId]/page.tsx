@@ -8,6 +8,7 @@ import { useDeviceSelection } from '@/hooks/useDeviceSelection';
 import { SignalingMessage } from '@/lib/websocket';
 import { PusherSignalingClient } from '@/lib/pusher-client';
 import { audioContextManager } from '@/lib/audio-context-manager';
+import { BattleFormat, getBeatIntroOffset, getBattleFormatConfig, BATTLE_FORMATS } from '@/lib/battle-formats';
 import styles from './room.module.css';
 
 interface PeerInfo {
@@ -47,6 +48,10 @@ function RoomPageContent() {
   const [websocketConnected, setWebsocketConnected] = useState(false);
   const [isBeatPlaying, setIsBeatPlaying] = useState(false);
   const [isMicMuted, setIsMicMuted] = useState(false);
+  const [battleFormat, setBattleFormat] = useState<BattleFormat | null>(null);
+  const [currentTurn, setCurrentTurn] = useState<{ userId: string; turnNumber: number; startTime: number } | null>(null);
+  const [turnProgress, setTurnProgress] = useState<{ verses: number; lines: number } | { timeRemaining: number } | null>(null);
+  const [beatIntroOffset, setBeatIntroOffset] = useState<number>(0);
 
   // ─── Refs ───
   const userIdRef = useRef(`user-${Date.now()}-${Math.random()}`);
@@ -70,6 +75,11 @@ function RoomPageContent() {
   const isHostRef = useRef(isHost);
   const selectedBeatRef = useRef(selectedBeat);
   const isMobileRef = useRef(isMobile);
+  const battleFormatRef = useRef<BattleFormat | null>(null);
+  const currentTurnRef = useRef<{ userId: string; turnNumber: number; startTime: number } | null>(null);
+  const turnProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioAnalyserRef = useRef<AnalyserNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   // ─── Device Selection ───
   const {
@@ -116,6 +126,81 @@ function RoomPageContent() {
     }
   }, [beatAudio, isBeatPlaying, playBeat]);
 
+  // ─── Turn System Helpers ───
+  const getOrderedUserIds = useCallback((): string[] => {
+    const allUsers = [userIdRef.current, ...Array.from(peers.keys())];
+    return allUsers.sort();
+  }, [peers]);
+
+  const startTurn = useCallback((userId: string, turnNumber: number, format: BattleFormat) => {
+    if (!isHost) return;
+
+    const startTime = Date.now() + (beatIntroOffset * 1000);
+    setCurrentTurn({ userId, turnNumber, startTime });
+    currentTurnRef.current = { userId, turnNumber, startTime };
+
+    signalingRef.current?.send({
+      type: 'turn-started',
+      userId,
+      turnNumber,
+      startTime,
+      format,
+    });
+
+    // Inicializar progreso según formato
+    const config = getBattleFormatConfig(format);
+    if (format === 'minuto-libre') {
+      setTurnProgress({ timeRemaining: config.timePerTurnSeconds || 60 });
+    } else {
+      setTurnProgress({ verses: 0, lines: 0 });
+    }
+  }, [isHost, beatIntroOffset]);
+
+  const endTurn = useCallback((userId: string, turnNumber: number) => {
+    if (!isHost) return;
+
+    signalingRef.current?.send({
+      type: 'turn-ended',
+      userId,
+      turnNumber,
+    });
+
+    setCurrentTurn(null);
+    currentTurnRef.current = null;
+    setTurnProgress(null);
+
+    if (turnProgressIntervalRef.current) {
+      clearInterval(turnProgressIntervalRef.current);
+      turnProgressIntervalRef.current = null;
+    }
+  }, [isHost]);
+
+  const nextTurn = useCallback(() => {
+    if (!isHost || !battleFormatRef.current) return;
+
+    const orderedUsers = getOrderedUserIds();
+    if (orderedUsers.length === 0) return;
+
+    const currentTurnNum = currentTurnRef.current?.turnNumber || 0;
+    const currentUserId = currentTurnRef.current?.userId;
+    
+    // Encontrar índice del usuario actual
+    const currentIndex = currentUserId ? orderedUsers.indexOf(currentUserId) : -1;
+    const nextIndex = (currentIndex + 1) % orderedUsers.length;
+    const nextUserId = orderedUsers[nextIndex];
+    const nextTurnNum = currentTurnNum + 1;
+
+    // Finalizar turno actual si existe
+    if (currentUserId) {
+      endTurn(currentUserId, currentTurnNum);
+    }
+
+    // Iniciar siguiente turno
+    setTimeout(() => {
+      startTurn(nextUserId, nextTurnNum, battleFormatRef.current!);
+    }, 500);
+  }, [isHost, getOrderedUserIds, startTurn, endTurn]);
+
   // ─── Battle Logic ───
   const startBattle = useCallback(async (serverTimestamp: number) => {
     setBattleStarted(true);
@@ -127,7 +212,8 @@ function RoomPageContent() {
     setTimeout(async () => {
       const audio = beatAudioRef.current || beatAudio;
       if (audio) {
-        audio.currentTime = 0;
+        // Ajustar tiempo inicial considerando el offset de intro
+        audio.currentTime = beatIntroOffset;
         const success = await playBeat();
 
         if (isHost && success && signalingRef.current) {
@@ -137,10 +223,20 @@ function RoomPageContent() {
               timestamp: Date.now() + 50,
             });
           }, 50);
+
+          // Iniciar primer turno después de que el beat empiece
+          if (battleFormatRef.current) {
+            const orderedUsers = getOrderedUserIds();
+            if (orderedUsers.length > 0) {
+              setTimeout(() => {
+                startTurn(orderedUsers[0], 1, battleFormatRef.current!);
+              }, (beatIntroOffset * 1000) + 100);
+            }
+          }
         }
       }
     }, delay);
-  }, [beatAudio, isHost, playBeat]);
+  }, [beatAudio, isHost, playBeat, beatIntroOffset, getOrderedUserIds, startTurn]);
 
   const toggleBeat = useCallback(async () => {
     if (!isHost) return;
@@ -237,6 +333,8 @@ function RoomPageContent() {
   useEffect(() => { isMobileRef.current = isMobile; }, [isMobile]);
   useEffect(() => { selectedInputIdRef.current = selectedInputId; }, [selectedInputId]);
   useEffect(() => { replaceLocalStreamRef.current = replaceLocalStream; }, [replaceLocalStream]);
+  useEffect(() => { battleFormatRef.current = battleFormat; }, [battleFormat]);
+  useEffect(() => { currentTurnRef.current = currentTurn; }, [currentTurn]);
 
   // ─── Signaling Setup (only re-runs on roomId/nickname change) ───
   useEffect(() => {
@@ -408,6 +506,42 @@ function RoomPageContent() {
           case 'beat-restart':
             if (!isHostRef.current) restartBeatInternalRef.current?.();
             break;
+
+          case 'battle-format-selected':
+            if (message.userId !== userIdRef.current) {
+              setBattleFormat(message.format);
+              battleFormatRef.current = message.format;
+            }
+            break;
+
+          case 'turn-started':
+            setCurrentTurn({
+              userId: message.userId,
+              turnNumber: message.turnNumber,
+              startTime: message.startTime,
+            });
+            currentTurnRef.current = {
+              userId: message.userId,
+              turnNumber: message.turnNumber,
+              startTime: message.startTime,
+            };
+            setBattleFormat(message.format);
+            battleFormatRef.current = message.format;
+            break;
+
+          case 'turn-ended':
+            if (message.userId === currentTurnRef.current?.userId) {
+              setCurrentTurn(null);
+              currentTurnRef.current = null;
+              setTurnProgress(null);
+            }
+            break;
+
+          case 'beat-intro-offset':
+            if (message.beatNumber === selectedBeatRef.current) {
+              setBeatIntroOffset(message.offsetSeconds);
+            }
+            break;
         }
       },
       (connected: boolean) => {
@@ -519,15 +653,112 @@ function RoomPageContent() {
     }
   }, [localStream]);
 
+  // ─── Turn-based microphone control ───
+  useEffect(() => {
+    if (!battleStarted || !localStream || !currentTurn) return;
+
+    const audioTracks = localStream.getAudioTracks();
+    const isMyTurn = currentTurn.userId === userIdRef.current;
+
+    audioTracks.forEach(track => {
+      track.enabled = isMyTurn;
+    });
+
+    setIsMicMuted(!isMyTurn);
+  }, [battleStarted, localStream, currentTurn]);
+
+  // ─── Turn progress tracking ───
+  useEffect(() => {
+    if (!battleStarted || !currentTurn || !battleFormat) return;
+
+    const format = battleFormat;
+    const config = getBattleFormatConfig(format);
+
+    if (format === 'minuto-libre') {
+      // Timer para minuto libre
+      const startTime = currentTurn.startTime;
+      const duration = (config.timePerTurnSeconds || 60) * 1000;
+
+      turnProgressIntervalRef.current = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, duration - elapsed);
+        const remainingSeconds = Math.ceil(remaining / 1000);
+
+        setTurnProgress({ timeRemaining: remainingSeconds });
+
+        if (remaining <= 0 && isHost) {
+          nextTurn();
+        }
+      }, 100);
+    } else {
+      // Para 4x4 y 8x8, usar detección de audio (simplificado: usar timer estimado)
+      // En una implementación más avanzada, se podría analizar el audio para detectar pausas
+      const estimatedTimePerLine = 4; // segundos estimados por línea
+      const totalLines = (config.verses || 0) * (config.linesPerVerse || 0);
+      const estimatedDuration = totalLines * estimatedTimePerLine * 1000;
+      const startTime = currentTurn.startTime;
+
+      turnProgressIntervalRef.current = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const progressPercent = Math.min(100, (elapsed / estimatedDuration) * 100);
+        
+        // Estimación simple: asumir distribución uniforme
+        const estimatedLines = Math.floor((progressPercent / 100) * totalLines);
+        const estimatedVerses = Math.floor(estimatedLines / (config.linesPerVerse || 1));
+        const linesInCurrentVerse = estimatedLines % (config.linesPerVerse || 1);
+
+        setTurnProgress({
+          verses: estimatedVerses,
+          lines: linesInCurrentVerse,
+        });
+
+        if (elapsed >= estimatedDuration && isHost) {
+          nextTurn();
+        }
+      }, 500);
+    }
+
+    return () => {
+      if (turnProgressIntervalRef.current) {
+        clearInterval(turnProgressIntervalRef.current);
+        turnProgressIntervalRef.current = null;
+      }
+    };
+  }, [battleStarted, currentTurn, battleFormat, isHost, nextTurn]);
+
   // ─── Beat Change (host only) ───
   const handleBeatChange = useCallback((beatNumber: number) => {
     if (!isHost) return;
     setSelectedBeat(beatNumber);
+    const offset = getBeatIntroOffset(beatNumber);
+    setBeatIntroOffset(offset);
     signalingRef.current?.send({
       type: 'beat-selected',
       beatNumber,
     });
+    signalingRef.current?.send({
+      type: 'beat-intro-offset',
+      beatNumber,
+      offsetSeconds: offset,
+    });
   }, [isHost]);
+
+  // ─── Battle Format Change (host only) ───
+  const handleFormatChange = useCallback((format: BattleFormat) => {
+    if (!isHost) return;
+    setBattleFormat(format);
+    battleFormatRef.current = format;
+    signalingRef.current?.send({
+      type: 'battle-format-selected',
+      format,
+    });
+  }, [isHost]);
+
+  // ─── Initialize beat intro offset ───
+  useEffect(() => {
+    const offset = getBeatIntroOffset(selectedBeat);
+    setBeatIntroOffset(offset);
+  }, [selectedBeat]);
 
   // ─── Load Beat Audio (routed through Web Audio API) ───
   useEffect(() => {
@@ -791,7 +1022,87 @@ function RoomPageContent() {
         )}
         {battleStarted && (
           <div className={styles.battleActive}>
-            <p className={styles.battleText}>BATALLA EN CURSO</p>
+            {currentTurn && (
+              <p className={styles.battleText}>
+                {currentTurn.userId === userIdRef.current 
+                  ? nickname 
+                  : peers.get(currentTurn.userId)?.nickname || 'Desconocido'}
+              </p>
+            )}
+            {currentTurn && (
+              <div className={styles.turnInfo}>
+                <p className={styles.turnNumber}>Turno #{currentTurn.turnNumber}</p>
+              </div>
+            )}
+            {turnProgress && battleFormat && (
+              <div className={styles.progressInfo}>
+                {'timeRemaining' in turnProgress ? (
+                  <div className={styles.timeProgress}>
+                    <div className={styles.pieChartContainer}>
+                      <svg className={styles.pieChart} viewBox="0 0 100 100">
+                        <circle
+                          className={styles.pieChartBackground}
+                          cx="50"
+                          cy="50"
+                          r="45"
+                        />
+                        <circle
+                          className={styles.pieChartProgress}
+                          cx="50"
+                          cy="50"
+                          r="45"
+                          style={{
+                            strokeDasharray: `${2 * Math.PI * 45}`,
+                            strokeDashoffset: `${2 * Math.PI * 45 * (1 - (turnProgress.timeRemaining / (getBattleFormatConfig(battleFormat).timePerTurnSeconds || 60)))}`,
+                          }}
+                        />
+                        <text
+                          x="50"
+                          y="50"
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          className={styles.pieChartText}
+                        >
+                          {turnProgress.timeRemaining}s
+                        </text>
+                      </svg>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.verseProgress}>
+                    <div className={styles.pieChartContainer}>
+                      <svg className={styles.pieChart} viewBox="0 0 100 100">
+                        <circle
+                          className={styles.pieChartBackground}
+                          cx="50"
+                          cy="50"
+                          r="45"
+                        />
+                        <circle
+                          className={styles.pieChartProgress}
+                          cx="50"
+                          cy="50"
+                          r="45"
+                          style={{
+                            strokeDasharray: `${2 * Math.PI * 45}`,
+                            strokeDashoffset: `${2 * Math.PI * 45 * (1 - (((turnProgress.verses * (getBattleFormatConfig(battleFormat).linesPerVerse || 0)) + turnProgress.lines) / ((getBattleFormatConfig(battleFormat).verses || 0) * (getBattleFormatConfig(battleFormat).linesPerVerse || 0))))}`,
+                          }}
+                        />
+                        <text
+                          x="50"
+                          y="50"
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          className={styles.pieChartText}
+                        >
+                          {Math.round((((turnProgress.verses * (getBattleFormatConfig(battleFormat).linesPerVerse || 0)) + turnProgress.lines) / ((getBattleFormatConfig(battleFormat).verses || 0) * (getBattleFormatConfig(battleFormat).linesPerVerse || 0))) * 100)}%
+                        </text>
+                      </svg>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -850,7 +1161,47 @@ function RoomPageContent() {
         </div>
       )}
 
-      {!battleStarted && websocketConnected && allPeersConnected && hasPeers && !isReady && (
+      {!battleStarted && websocketConnected && allPeersConnected && hasPeers && isHost && !battleFormat && (
+        <div className={styles.formatSelector}>
+          <label className={styles.label}>Seleccionar formato de batalla:</label>
+          <div className={styles.formatButtons}>
+            <button
+              onClick={() => handleFormatChange('4x4')}
+              className={styles.formatButton}
+            >
+              <div className={styles.formatButtonTitle}>4x4</div>
+              <div className={styles.formatButtonDesc}>4 versos de 4 líneas</div>
+            </button>
+            <button
+              onClick={() => handleFormatChange('8x8')}
+              className={styles.formatButton}
+            >
+              <div className={styles.formatButtonTitle}>8x8</div>
+              <div className={styles.formatButtonDesc}>8 versos de 8 líneas</div>
+            </button>
+            <button
+              onClick={() => handleFormatChange('minuto-libre')}
+              className={styles.formatButton}
+            >
+              <div className={styles.formatButtonTitle}>Minuto Libre</div>
+              <div className={styles.formatButtonDesc}>60 segundos por turno</div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!battleStarted && websocketConnected && allPeersConnected && hasPeers && battleFormat && (
+        <div className={styles.formatDisplay}>
+          <p className={styles.formatLabel}>Formato seleccionado:</p>
+          <p className={styles.formatValue}>
+            {battleFormat === '4x4' && '4x4 (4 versos de 4 líneas)'}
+            {battleFormat === '8x8' && '8x8 (8 versos de 8 líneas)'}
+            {battleFormat === 'minuto-libre' && 'Minuto Libre (60 segundos)'}
+          </p>
+        </div>
+      )}
+
+      {!battleStarted && websocketConnected && allPeersConnected && hasPeers && !isReady && battleFormat && (
         <button onClick={handleReady} className={styles.readyButton}>
           Estoy listo
         </button>

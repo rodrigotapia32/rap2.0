@@ -5,6 +5,8 @@
  * NOTA: Para producción en Vercel, usar PusherSignalingClient de pusher-client.ts
  */
 
+import { BattleFormat } from './battle-formats';
+
 export type SignalingMessage =
   | { type: 'offer'; offer: RTCSessionDescriptionInit; userId?: string; targetUserId?: string; sessionId?: string }
   | { type: 'answer'; answer: RTCSessionDescriptionInit; userId?: string; targetUserId?: string; sessionId?: string }
@@ -21,7 +23,11 @@ export type SignalingMessage =
   | { type: 'beat-selected'; beatNumber: number; userId?: string }
   | { type: 'beat-play'; timestamp?: number; userId?: string }
   | { type: 'beat-pause'; userId?: string }
-  | { type: 'beat-restart'; userId?: string };
+  | { type: 'beat-restart'; userId?: string }
+  | { type: 'battle-format-selected'; format: BattleFormat; userId?: string }
+  | { type: 'turn-started'; userId: string; turnNumber: number; startTime: number; format: BattleFormat }
+  | { type: 'turn-ended'; userId: string; turnNumber: number }
+  | { type: 'beat-intro-offset'; beatNumber: number; offsetSeconds: number; userId?: string };
 
 export class SignalingClient {
   private ws: WebSocket | null = null;
