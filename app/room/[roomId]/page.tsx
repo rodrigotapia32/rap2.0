@@ -542,6 +542,7 @@ function RoomPageContent() {
 
           case 'turn-started':
             // El tiempo del turno comienza desde el offset del beat
+            // Asegurarse de usar el offset actual del beat seleccionado
             const beatStartTime = beatIntroOffset;
             setCurrentTurn({
               userId: message.userId,
@@ -557,6 +558,9 @@ function RoomPageContent() {
             };
             setBattleFormat(message.format);
             battleFormatRef.current = message.format;
+            // Inicializar el progreso con el tiempo completo
+            const config = getBattleFormatConfig(message.format);
+            setTurnProgress({ timeRemaining: config.timePerTurnSeconds || 60 });
             break;
 
           case 'turn-ended':
