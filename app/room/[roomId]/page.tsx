@@ -707,48 +707,46 @@ function RoomPageContent() {
             break;
 
           case 'cachipum-round-result':
-            // Solo procesar resultados si el usuario ya completó sus 3 opciones
-            const myChoicesCount = cachipumChoices.get(userIdRef.current)?.length || 0;
-            if (myChoicesCount === 3) {
-              const roundChoices = new Map<string, CachipumChoice>();
-              Object.entries(message.choices).forEach(([userId, choice]) => {
-                roundChoices.set(userId, choice);
-              });
-              
-              const roundResult: CachipumRoundResult = {
-                round: message.round,
-                choices: roundChoices,
-                winners: message.winners,
-              };
-              
-              setCachipumResults(prev => {
-                const next = [...prev];
-                const index = next.findIndex(r => r.round === message.round);
-                if (index >= 0) {
-                  next[index] = roundResult;
-                } else {
-                  next.push(roundResult);
-                }
-                return next.sort((a, b) => a.round - b.round);
-              });
-            }
+            // Procesar resultados siempre (para que todos puedan ver la animación)
+            const roundChoices = new Map<string, CachipumChoice>();
+            Object.entries(message.choices).forEach(([userId, choice]) => {
+              roundChoices.set(userId, choice);
+            });
+            
+            const roundResult: CachipumRoundResult = {
+              round: message.round,
+              choices: roundChoices,
+              winners: message.winners,
+            };
+            
+            setCachipumResults(prev => {
+              const next = [...prev];
+              const index = next.findIndex(r => r.round === message.round);
+              if (index >= 0) {
+                next[index] = roundResult;
+              } else {
+                next.push(roundResult);
+              }
+              return next.sort((a, b) => a.round - b.round);
+            });
             break;
 
           case 'cachipum-winner':
-            // Mostrar animación para todos los participantes que completaron sus 3 opciones
-            const myChoicesCountForWinner = cachipumChoices.get(userIdRef.current)?.length || 0;
-            if (myChoicesCountForWinner === 3) {
-              setCachipumWinner(message.winnerId);
-              // Iniciar animación de rondas para todos
-              setCurrentCachipumRoundDisplay(0);
-              setShowCachipumAnimation(true);
-              // Usar los resultados que ya se recibieron
-              setTimeout(() => {
-                if (cachipumResults.length > 0) {
-                  startCachipumAnimation(cachipumResults, message.winnerId);
-                }
-              }, 100);
-            }
+            // Mostrar animación para todos los participantes
+            setCachipumWinner(message.winnerId);
+            // Iniciar animación de rondas para todos
+            setCurrentCachipumRoundDisplay(0);
+            setShowCachipumAnimation(true);
+            // Esperar a que los resultados estén disponibles
+            const checkAndStartAnimation = () => {
+              if (cachipumResults.length > 0) {
+                startCachipumAnimation(cachipumResults, message.winnerId);
+              } else {
+                // Si aún no hay resultados, esperar un poco más
+                setTimeout(checkAndStartAnimation, 100);
+              }
+            };
+            setTimeout(checkAndStartAnimation, 100);
             break;
 
           case 'cachipum-restart':
