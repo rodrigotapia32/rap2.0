@@ -135,8 +135,8 @@ function RoomPageContent() {
   const startTurn = useCallback((userId: string, turnNumber: number, format: BattleFormat) => {
     if (!isHost) return;
 
-    const audio = beatAudioRef.current || beatAudio;
-    const beatStartTime = audio ? audio.currentTime : beatIntroOffset;
+    // El tiempo del turno comienza desde el offset del beat
+    const beatStartTime = beatIntroOffset;
     const startTime = Date.now() + (beatIntroOffset * 1000);
     setCurrentTurn({ userId, turnNumber, startTime, beatStartTime });
     currentTurnRef.current = { userId, turnNumber, startTime, beatStartTime };
@@ -151,12 +151,8 @@ function RoomPageContent() {
 
     // Inicializar progreso según formato
     const config = getBattleFormatConfig(format);
-    if (format === 'minuto-libre') {
-      setTurnProgress({ timeRemaining: config.timePerTurnSeconds || 60 });
-    } else {
-      setTurnProgress({ timeRemaining: config.timePerTurnSeconds || 60 }); // Cambiar a tiempo también
-    }
-  }, [isHost, beatIntroOffset, beatAudio]);
+    setTurnProgress({ timeRemaining: config.timePerTurnSeconds || 60 });
+  }, [isHost, beatIntroOffset]);
 
   const endTurn = useCallback((userId: string, turnNumber: number) => {
     if (!isHost) return;
@@ -258,9 +254,9 @@ function RoomPageContent() {
     (async () => {
       await restartBeatInternal();
       // Reiniciar el tiempo del turno si hay un turno activo
+      // El tiempo comienza desde el offset del beat
       if (currentTurnRef.current && battleFormatRef.current) {
-        const audio = beatAudioRef.current || beatAudio;
-        const newBeatStartTime = audio ? audio.currentTime : beatIntroOffset;
+        const newBeatStartTime = beatIntroOffset;
         const updatedTurn = {
           ...currentTurnRef.current,
           beatStartTime: newBeatStartTime,
@@ -270,7 +266,7 @@ function RoomPageContent() {
       }
       signalingRef.current?.send({ type: 'beat-restart' });
     })();
-  }, [isHost, restartBeatInternal, beatIntroOffset, beatAudio]);
+  }, [isHost, restartBeatInternal, beatIntroOffset]);
 
   // ─── WebRTC Hook ───
   const {
@@ -523,17 +519,15 @@ function RoomPageContent() {
               (async () => {
                 await restartBeatInternalRef.current?.();
                 // Reiniciar el tiempo del turno si hay un turno activo
+                // El tiempo comienza desde el offset del beat
                 if (currentTurnRef.current && battleFormatRef.current) {
-                  const audio = beatAudioRef.current;
-                  if (audio) {
-                    const newBeatStartTime = audio.currentTime;
-                    const updatedTurn = {
-                      ...currentTurnRef.current,
-                      beatStartTime: newBeatStartTime,
-                    };
-                    setCurrentTurn(updatedTurn);
-                    currentTurnRef.current = updatedTurn;
-                  }
+                  const newBeatStartTime = beatIntroOffset;
+                  const updatedTurn = {
+                    ...currentTurnRef.current,
+                    beatStartTime: newBeatStartTime,
+                  };
+                  setCurrentTurn(updatedTurn);
+                  currentTurnRef.current = updatedTurn;
                 }
               })();
             }
@@ -547,8 +541,8 @@ function RoomPageContent() {
             break;
 
           case 'turn-started':
-            const audio = beatAudioRef.current || beatAudio;
-            const beatStartTime = audio ? audio.currentTime : beatIntroOffset;
+            // El tiempo del turno comienza desde el offset del beat
+            const beatStartTime = beatIntroOffset;
             setCurrentTurn({
               userId: message.userId,
               turnNumber: message.turnNumber,
