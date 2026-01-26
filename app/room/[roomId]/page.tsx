@@ -8,7 +8,7 @@ import { useDeviceSelection } from '@/hooks/useDeviceSelection';
 import { SignalingMessage } from '@/lib/websocket';
 import { PusherSignalingClient } from '@/lib/pusher-client';
 import { audioContextManager } from '@/lib/audio-context-manager';
-import { BattleFormat, getBeatIntroOffset, getBattleFormatConfig, BATTLE_FORMATS } from '@/lib/battle-formats';
+import { BattleFormat, getBeatIntroOffset, getBattleFormatConfig, BATTLE_FORMATS, BEAT_INTRO_OFFSETS } from '@/lib/battle-formats';
 import styles from './room.module.css';
 
 interface PeerInfo {
@@ -52,6 +52,7 @@ function RoomPageContent() {
   const [currentTurn, setCurrentTurn] = useState<{ userId: string; turnNumber: number; startTime: number } | null>(null);
   const [turnProgress, setTurnProgress] = useState<{ verses: number; lines: number } | { timeRemaining: number } | null>(null);
   const [beatIntroOffset, setBeatIntroOffset] = useState<number>(0);
+  const [beatIntroOffsets, setBeatIntroOffsets] = useState<Map<number, number>>(new Map());
 
   // ─── Refs ───
   const userIdRef = useRef(`user-${Date.now()}-${Math.random()}`);
@@ -538,6 +539,13 @@ function RoomPageContent() {
             break;
 
           case 'beat-intro-offset':
+            // Actualizar el offset en el mapa de offsets
+            setBeatIntroOffsets(prev => {
+              const next = new Map(prev);
+              next.set(message.beatNumber, message.offsetSeconds);
+              return next;
+            });
+            // Si el beat recibido es el actualmente seleccionado, actualizar inmediatamente
             if (message.beatNumber === selectedBeatRef.current) {
               setBeatIntroOffset(message.offsetSeconds);
             }
@@ -726,11 +734,34 @@ function RoomPageContent() {
     };
   }, [battleStarted, currentTurn, battleFormat, isHost, nextTurn]);
 
+  // ─── Offset Change (host only) ───
+  const handleOffsetChange = useCallback((beatNumber: number, offset: number) => {
+    if (!isHost) return;
+    
+    setBeatIntroOffsets(prev => {
+      const next = new Map(prev);
+      next.set(beatNumber, offset);
+      return next;
+    });
+
+    // Si el beat seleccionado es el actual, actualizar inmediatamente
+    if (beatNumber === selectedBeat) {
+      setBeatIntroOffset(offset);
+    }
+
+    // Sincronizar con otros usuarios
+    signalingRef.current?.send({
+      type: 'beat-intro-offset',
+      beatNumber,
+      offsetSeconds: offset,
+    });
+  }, [isHost, selectedBeat]);
+
   // ─── Beat Change (host only) ───
   const handleBeatChange = useCallback((beatNumber: number) => {
     if (!isHost) return;
     setSelectedBeat(beatNumber);
-    const offset = getBeatIntroOffset(beatNumber);
+    const offset = beatIntroOffsets.get(beatNumber) ?? getBeatIntroOffset(beatNumber);
     setBeatIntroOffset(offset);
     signalingRef.current?.send({
       type: 'beat-selected',
@@ -741,7 +772,7 @@ function RoomPageContent() {
       beatNumber,
       offsetSeconds: offset,
     });
-  }, [isHost]);
+  }, [isHost, beatIntroOffsets]);
 
   // ─── Battle Format Change (host only) ───
   const handleFormatChange = useCallback((format: BattleFormat) => {
@@ -754,11 +785,20 @@ function RoomPageContent() {
     });
   }, [isHost]);
 
+  // ─── Initialize beat intro offsets with default values ───
+  useEffect(() => {
+    const defaultOffsets = new Map<number, number>();
+    Object.entries(BEAT_INTRO_OFFSETS).forEach(([beatNum, offset]) => {
+      defaultOffsets.set(Number(beatNum), offset);
+    });
+    setBeatIntroOffsets(defaultOffsets);
+  }, []);
+
   // ─── Initialize beat intro offset ───
   useEffect(() => {
-    const offset = getBeatIntroOffset(selectedBeat);
+    const offset = beatIntroOffsets.get(selectedBeat) ?? getBeatIntroOffset(selectedBeat);
     setBeatIntroOffset(offset);
-  }, [selectedBeat]);
+  }, [selectedBeat, beatIntroOffsets]);
 
   // ─── Load Beat Audio (routed through Web Audio API) ───
   useEffect(() => {
@@ -1133,30 +1173,34 @@ function RoomPageContent() {
         <div className={styles.beatSelector}>
           <label className={styles.label}>Seleccionar beat:</label>
           <div className={styles.beatButtons}>
-            <button
-              onClick={() => handleBeatChange(1)}
-              className={`${styles.beatButton} ${selectedBeat === 1 ? styles.beatButtonActive : ''}`}
-            >
-              Beat 1
-            </button>
-            <button
-              onClick={() => handleBeatChange(2)}
-              className={`${styles.beatButton} ${selectedBeat === 2 ? styles.beatButtonActive : ''}`}
-            >
-              Beat 2
-            </button>
-            <button
-              onClick={() => handleBeatChange(3)}
-              className={`${styles.beatButton} ${selectedBeat === 3 ? styles.beatButtonActive : ''}`}
-            >
-              Beat 3
-            </button>
-            <button
-              onClick={() => handleBeatChange(4)}
-              className={`${styles.beatButton} ${selectedBeat === 4 ? styles.beatButtonActive : ''}`}
-            >
-              Beat 4
-            </button>
+            {[1, 2, 3, 4].map(beatNum => {
+              const currentOffset = beatIntroOffsets.get(beatNum) ?? getBeatIntroOffset(beatNum);
+              return (
+                <div key={beatNum} className={styles.beatItem}>
+                  <button
+                    onClick={() => handleBeatChange(beatNum)}
+                    className={`${styles.beatButton} ${selectedBeat === beatNum ? styles.beatButtonActive : ''}`}
+                  >
+                    Beat {beatNum}
+                  </button>
+                  <div className={styles.beatOffsetControl}>
+                    <label className={styles.beatOffsetLabel}>
+                      Intro: {currentOffset.toFixed(1)}s
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="30"
+                      step="0.1"
+                      value={currentOffset}
+                      onChange={(e) => handleOffsetChange(beatNum, parseFloat(e.target.value))}
+                      onTouchStart={() => audioContextManager.unlockFromGesture()}
+                      className={styles.beatOffsetInput}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
