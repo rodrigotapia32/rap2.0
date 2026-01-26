@@ -41,10 +41,10 @@ export const BATTLE_FORMATS: Record<BattleFormat, BattleFormatConfig> = {
  * Define cuándo empieza realmente el beat después de la intro
  */
 export const BEAT_INTRO_OFFSETS: Record<number, number> = {
-  1: 0, // beat1.mp3 - sin intro (o ajustar según necesidad)
-  2: 0, // beat2.mp3
-  3: 0, // beat3.mp3
-  4: 0, // beat4.mp3
+  1: 20, // beat1.mp3 - comienza al segundo 20
+  2: 9,  // beat2.mp3 - comienza al segundo 9
+  3: 18, // beat3.mp3 - comienza al segundo 18
+  4: 3,  // beat4.mp3 - comienza al segundo 3
   // Agregar más beats según sea necesario
 };
 
