@@ -652,17 +652,37 @@
 }
 
 .cachipumRoundResult {
-  margin: 2rem 0;
+  margin: 1.5rem 0;
   padding: 1.5rem;
   background: #2a2a2a;
   border-radius: 8px;
   border: 1px solid #444;
+  transition: all 0.3s ease;
 }
 
-.cachipumRoundResult h4 {
+.cachipumWinningRound {
+  background: linear-gradient(135deg, #2a2a2a 0%, #1a3a2a 100%);
+  border: 2px solid #10b981;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+}
+
+.cachipumRoundTitle {
   color: #fff;
   font-size: 1.2rem;
   margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.cachipumWinningBadge {
+  background: #10b981;
+  color: #fff;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .cachipumRoundChoices {
@@ -706,6 +726,11 @@
   border: 2px solid #444;
   min-width: 150px;
   transition: all 0.3s ease;
+}
+
+.cachipumVsPlayerMissing {
+  opacity: 0.5;
+  border-style: dashed;
 }
 
 .cachipumVsWinner {
@@ -819,6 +844,13 @@
   color: #fff;
   font-size: 1.2rem;
   font-weight: 600;
+}
+
+.cachipumAnimationActions {
+  margin-top: 2rem;
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
 }
 
 /* ─── Cachipum Decision ─── */
