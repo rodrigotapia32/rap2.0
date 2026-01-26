@@ -6,6 +6,7 @@
  */
 
 import { BattleFormat } from './battle-formats';
+import { CachipumChoice, CachipumRoundResult } from './cachipum';
 
 export type SignalingMessage =
   | { type: 'offer'; offer: RTCSessionDescriptionInit; userId?: string; targetUserId?: string; sessionId?: string }
@@ -27,7 +28,11 @@ export type SignalingMessage =
   | { type: 'battle-format-selected'; format: BattleFormat; userId?: string }
   | { type: 'turn-started'; userId: string; turnNumber: number; startTime: number; format: BattleFormat }
   | { type: 'turn-ended'; userId: string; turnNumber: number }
-  | { type: 'beat-intro-offset'; beatNumber: number; offsetSeconds: number; userId?: string };
+  | { type: 'beat-intro-offset'; beatNumber: number; offsetSeconds: number; userId?: string }
+  | { type: 'cachipum-choice'; userId: string; choice: CachipumChoice; round: number }
+  | { type: 'cachipum-round-result'; round: number; choices: Record<string, CachipumChoice>; winners: string[]; userId?: string }
+  | { type: 'cachipum-winner'; winnerId: string; userId?: string }
+  | { type: 'cachipum-starter-selected'; starterId: string; userId?: string };
 
 export class SignalingClient {
   private ws: WebSocket | null = null;

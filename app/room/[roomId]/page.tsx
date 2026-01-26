@@ -9,6 +9,7 @@ import { SignalingMessage } from '@/lib/websocket';
 import { PusherSignalingClient } from '@/lib/pusher-client';
 import { audioContextManager } from '@/lib/audio-context-manager';
 import { BattleFormat, getBeatIntroOffset, getBattleFormatConfig, BATTLE_FORMATS, BEAT_INTRO_OFFSETS } from '@/lib/battle-formats';
+import { CachipumChoice, CachipumRoundResult, determineRoundWinners, determineCachipumWinner, getCachipumEmoji, getCachipumLabel } from '@/lib/cachipum';
 import styles from './room.module.css';
 
 interface PeerInfo {
@@ -53,6 +54,14 @@ function RoomPageContent() {
   const [turnProgress, setTurnProgress] = useState<{ verses: number; lines: number } | { timeRemaining: number } | null>(null);
   const [beatIntroOffset, setBeatIntroOffset] = useState<number>(0);
   const [beatOffsets, setBeatOffsets] = useState<Map<number, number>>(new Map());
+  const [cachipumChoices, setCachipumChoices] = useState<Map<string, CachipumChoice[]>>(new Map());
+  const [cachipumRound, setCachipumRound] = useState<number>(1);
+  const [cachipumResults, setCachipumResults] = useState<CachipumRoundResult[]>([]);
+  const [cachipumWinner, setCachipumWinner] = useState<string | null>(null);
+  const [cachipumStarter, setCachipumStarter] = useState<string | null>(null);
+  const [showCachipum, setShowCachipum] = useState<boolean>(false);
+  const [showCachipumDecision, setShowCachipumDecision] = useState<boolean>(false);
+  const [showCachipumAnimation, setShowCachipumAnimation] = useState<boolean>(false);
 
   // ─── Refs ───
   const userIdRef = useRef(`user-${Date.now()}-${Math.random()}`);
@@ -130,8 +139,19 @@ function RoomPageContent() {
   // ─── Turn System Helpers ───
   const getOrderedUserIds = useCallback((): string[] => {
     const allUsers = [userIdRef.current, ...Array.from(peers.keys())];
-    return allUsers.sort();
-  }, [peers]);
+    const sorted = allUsers.sort();
+    
+    // Si hay un cachipumStarter, ponerlo primero
+    if (cachipumStarter) {
+      const starterIndex = sorted.indexOf(cachipumStarter);
+      if (starterIndex > 0) {
+        sorted.splice(starterIndex, 1);
+        sorted.unshift(cachipumStarter);
+      }
+    }
+    
+    return sorted;
+  }, [peers, cachipumStarter]);
 
   const startTurn = useCallback((userId: string, turnNumber: number, format: BattleFormat) => {
     if (!isHost) return;
@@ -546,6 +566,13 @@ function RoomPageContent() {
             if (message.userId !== userIdRef.current) {
               setBattleFormat(message.format);
               battleFormatRef.current = message.format;
+              // Iniciar cachipum cuando se selecciona formato
+              setShowCachipum(true);
+              setCachipumRound(1);
+              setCachipumChoices(new Map());
+              setCachipumResults([]);
+              setCachipumWinner(null);
+              setCachipumStarter(null);
             }
             break;
 
@@ -600,6 +627,113 @@ function RoomPageContent() {
                 currentTurnRef.current = updatedTurn;
               }
             }
+            break;
+
+          case 'cachipum-choice':
+            if (message.userId !== userIdRef.current) {
+              setCachipumChoices(prev => {
+                const next = new Map(prev);
+                const existing = next.get(message.userId) || [];
+                const updated = [...existing, message.choice];
+                next.set(message.userId, updated);
+                
+                // Si es host y todos han completado, procesar rondas
+                if (isHostRef.current) {
+                  setTimeout(() => {
+                    const allUsers = [userIdRef.current, ...Array.from(peers.keys())];
+                    const allComplete = allUsers.every(userId => {
+                      const choices = next.get(userId);
+                      return choices && choices.length === 3;
+                    });
+                    if (allComplete) {
+                      // Procesar rondas con las opciones actualizadas
+                      const results: CachipumRoundResult[] = [];
+                      for (let round = 1; round <= 3; round++) {
+                        const roundChoices = new Map<string, CachipumChoice>();
+                        allUsers.forEach(userId => {
+                          const choices = next.get(userId);
+                          if (choices && choices[round - 1]) {
+                            roundChoices.set(userId, choices[round - 1]);
+                          }
+                        });
+                        const winners = determineRoundWinners(roundChoices);
+                        const result: CachipumRoundResult = {
+                          round,
+                          choices: roundChoices,
+                          winners,
+                        };
+                        results.push(result);
+                        signalingRef.current?.send({
+                          type: 'cachipum-round-result',
+                          round,
+                          choices: Object.fromEntries(roundChoices),
+                          winners,
+                        });
+                      }
+                      setCachipumResults(results);
+                      const winner = determineCachipumWinner(results);
+                      if (winner) {
+                        setCachipumWinner(winner);
+                        signalingRef.current?.send({
+                          type: 'cachipum-winner',
+                          winnerId: winner,
+                        });
+                        setShowCachipumAnimation(true);
+                        setTimeout(() => {
+                          setShowCachipumAnimation(false);
+                          if (winner === userIdRef.current) {
+                            setShowCachipumDecision(true);
+                          }
+                        }, 5000);
+                      }
+                    }
+                  }, 100);
+                }
+                
+                return next;
+              });
+            }
+            break;
+
+          case 'cachipum-round-result':
+            const roundChoices = new Map<string, CachipumChoice>();
+            Object.entries(message.choices).forEach(([userId, choice]) => {
+              roundChoices.set(userId, choice);
+            });
+            
+            const roundResult: CachipumRoundResult = {
+              round: message.round,
+              choices: roundChoices,
+              winners: message.winners,
+            };
+            
+            setCachipumResults(prev => {
+              const next = [...prev];
+              const index = next.findIndex(r => r.round === message.round);
+              if (index >= 0) {
+                next[index] = roundResult;
+              } else {
+                next.push(roundResult);
+              }
+              return next.sort((a, b) => a.round - b.round);
+            });
+            break;
+
+          case 'cachipum-winner':
+            setCachipumWinner(message.winnerId);
+            setShowCachipumAnimation(true);
+            setTimeout(() => {
+              setShowCachipumAnimation(false);
+              if (message.winnerId === userIdRef.current) {
+                setShowCachipumDecision(true);
+              }
+            }, 5000);
+            break;
+
+          case 'cachipum-starter-selected':
+            setCachipumStarter(message.starterId);
+            setShowCachipumDecision(false);
+            setShowCachipum(false);
             break;
         }
       },
@@ -841,7 +975,171 @@ function RoomPageContent() {
       type: 'battle-format-selected',
       format,
     });
+    // Iniciar cachipum después de seleccionar formato
+    setShowCachipum(true);
+    setCachipumRound(1);
+    setCachipumChoices(new Map());
+    setCachipumResults([]);
+    setCachipumWinner(null);
+    setCachipumStarter(null);
   }, [isHost]);
+
+  // ─── Cachipum Logic ───
+  const handleCachipumChoice = useCallback((choice: CachipumChoice) => {
+    const currentChoices = cachipumChoices.get(userIdRef.current) || [];
+    
+    // Verificar que no haya elegido ya 3 opciones
+    if (currentChoices.length >= 3) return;
+    
+    // Agregar la nueva opción
+    const newChoices = [...currentChoices, choice];
+    setCachipumChoices(prev => {
+      const next = new Map(prev);
+      next.set(userIdRef.current, newChoices);
+      return next;
+    });
+    
+    // Enviar la selección
+    signalingRef.current?.send({
+      type: 'cachipum-choice',
+      userId: userIdRef.current,
+      choice,
+      round: currentChoices.length + 1,
+    });
+    
+    // Si completó las 3 opciones, verificar si todos han terminado (solo host)
+    if (newChoices.length === 3 && isHost) {
+      setTimeout(() => checkAllCachipumChoicesComplete(), 100);
+    }
+  }, [cachipumChoices, isHost]);
+
+  const checkAllCachipumChoicesComplete = useCallback(() => {
+    setCachipumChoices(currentChoices => {
+      const allUsers = [userIdRef.current, ...Array.from(peers.keys())];
+      const allComplete = allUsers.every(userId => {
+        const choices = currentChoices.get(userId);
+        return choices && choices.length === 3;
+      });
+      
+      if (allComplete && isHost) {
+        // Procesar rondas con las opciones actuales
+        setTimeout(() => {
+          const results: CachipumRoundResult[] = [];
+          for (let round = 1; round <= 3; round++) {
+            const roundChoices = new Map<string, CachipumChoice>();
+            allUsers.forEach(userId => {
+              const choices = currentChoices.get(userId);
+              if (choices && choices[round - 1]) {
+                roundChoices.set(userId, choices[round - 1]);
+              }
+            });
+            const winners = determineRoundWinners(roundChoices);
+            const result: CachipumRoundResult = {
+              round,
+              choices: roundChoices,
+              winners,
+            };
+            results.push(result);
+            signalingRef.current?.send({
+              type: 'cachipum-round-result',
+              round,
+              choices: Object.fromEntries(roundChoices),
+              winners,
+            });
+          }
+          setCachipumResults(results);
+          const winner = determineCachipumWinner(results);
+          if (winner) {
+            setCachipumWinner(winner);
+            signalingRef.current?.send({
+              type: 'cachipum-winner',
+              winnerId: winner,
+            });
+            setShowCachipumAnimation(true);
+            setTimeout(() => {
+              setShowCachipumAnimation(false);
+              if (winner === userIdRef.current) {
+                setShowCachipumDecision(true);
+              }
+            }, 5000);
+          }
+        }, 100);
+      }
+      
+      return currentChoices;
+    });
+  }, [peers, isHost]);
+
+  const processCachipumRounds = useCallback(() => {
+    if (!isHost) return;
+    
+    const allUsers = [userIdRef.current, ...Array.from(peers.keys())];
+    const results: CachipumRoundResult[] = [];
+    
+    // Procesar las 3 rondas
+    for (let round = 1; round <= 3; round++) {
+      const roundChoices = new Map<string, CachipumChoice>();
+      
+      allUsers.forEach(userId => {
+        const choices = cachipumChoices.get(userId);
+        if (choices && choices[round - 1]) {
+          roundChoices.set(userId, choices[round - 1]);
+        }
+      });
+      
+      const winners = determineRoundWinners(roundChoices);
+      
+      const result: CachipumRoundResult = {
+        round,
+        choices: roundChoices,
+        winners,
+      };
+      
+      results.push(result);
+      
+      // Enviar resultado de la ronda
+      signalingRef.current?.send({
+        type: 'cachipum-round-result',
+        round,
+        choices: Object.fromEntries(roundChoices),
+        winners,
+      });
+    }
+    
+    setCachipumResults(results);
+    
+    // Determinar ganador final
+    const winner = determineCachipumWinner(results);
+    if (winner) {
+      setCachipumWinner(winner);
+      signalingRef.current?.send({
+        type: 'cachipum-winner',
+        winnerId: winner,
+      });
+      
+      // Mostrar animación
+      setShowCachipumAnimation(true);
+      setTimeout(() => {
+        setShowCachipumAnimation(false);
+        if (winner === userIdRef.current) {
+          setShowCachipumDecision(true);
+        }
+      }, 5000); // 5 segundos de animación
+    }
+  }, [isHost, cachipumChoices, peers]);
+
+  const handleCachipumStarterSelection = useCallback((starterId: string) => {
+    if (cachipumWinner !== userIdRef.current) return;
+    
+    setCachipumStarter(starterId);
+    setShowCachipumDecision(false);
+    setShowCachipum(false);
+    
+    signalingRef.current?.send({
+      type: 'cachipum-starter-selected',
+      starterId,
+    });
+  }, [cachipumWinner]);
 
   // ─── Initialize beat offsets with default values ───
   useEffect(() => {
@@ -1269,7 +1567,150 @@ function RoomPageContent() {
         </div>
       )}
 
-      {!battleStarted && websocketConnected && allPeersConnected && hasPeers && !isReady && battleFormat && (
+      {showCachipum && !cachipumStarter && !showCachipumAnimation && (
+        <div className={styles.cachipumContainer}>
+          <h3 className={styles.cachipumTitle}>Cachipum - Elige tus 3 opciones</h3>
+          <p className={styles.cachipumSubtitle}>
+            Elige 3 opciones (una por ronda). El ganador decidirá quién parte primero.
+          </p>
+          {(() => {
+            const myChoices = cachipumChoices.get(userIdRef.current) || [];
+            const allUsers = [userIdRef.current, ...Array.from(peers.keys())];
+            const allComplete = allUsers.every(userId => {
+              const choices = cachipumChoices.get(userId);
+              return choices && choices.length === 3;
+            });
+            
+            return (
+              <>
+                <div className={styles.cachipumProgress}>
+                  <p>Opciones elegidas: {myChoices.length} / 3</p>
+                  {myChoices.length > 0 && (
+                    <div className={styles.cachipumMyChoices}>
+                      {myChoices.map((choice, index) => (
+                        <span key={index} className={styles.cachipumChoiceBadge}>
+                          Ronda {index + 1}: {getCachipumEmoji(choice)} {getCachipumLabel(choice)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {myChoices.length < 3 && (
+                  <div className={styles.cachipumButtons}>
+                    <button
+                      onClick={() => handleCachipumChoice('piedra')}
+                      className={styles.cachipumButton}
+                      disabled={myChoices.length >= 3}
+                    >
+                      ✊ Piedra
+                    </button>
+                    <button
+                      onClick={() => handleCachipumChoice('papel')}
+                      className={styles.cachipumButton}
+                      disabled={myChoices.length >= 3}
+                    >
+                      ✋ Papel
+                    </button>
+                    <button
+                      onClick={() => handleCachipumChoice('tijera')}
+                      className={styles.cachipumButton}
+                      disabled={myChoices.length >= 3}
+                    >
+                      ✌️ Tijera
+                    </button>
+                  </div>
+                )}
+                {myChoices.length >= 3 && !allComplete && (
+                  <p className={styles.cachipumWaiting}>Esperando que todos elijan sus 3 opciones...</p>
+                )}
+                {allComplete && (
+                  <p className={styles.cachipumProcessing}>Procesando resultados...</p>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {showCachipumAnimation && cachipumResults.length > 0 && (
+        <div className={styles.cachipumAnimation}>
+          <h3 className={styles.cachipumTitle}>Resultados del Cachipum</h3>
+          {cachipumResults.map((result) => (
+            <div key={result.round} className={styles.cachipumRoundResult}>
+              <h4>Ronda {result.round}</h4>
+              <div className={styles.cachipumRoundChoices}>
+                {Array.from(result.choices.entries()).map(([userId, choice]) => {
+                  const userNickname = userId === userIdRef.current 
+                    ? nickname 
+                    : peers.get(userId)?.nickname || userId;
+                  return (
+                    <div key={userId} className={styles.cachipumPlayerChoice}>
+                      <span className={styles.cachipumPlayerName}>{userNickname}</span>
+                      <span className={styles.cachipumChoiceEmoji}>{getCachipumEmoji(choice)}</span>
+                      <span className={styles.cachipumChoiceLabel}>{getCachipumLabel(choice)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {result.winners.length > 0 && (
+                <div className={styles.cachipumRoundWinner}>
+                  {result.winners.length === 1 ? (
+                    <p>Ganador: {result.winners[0] === userIdRef.current ? nickname : peers.get(result.winners[0])?.nickname || result.winners[0]}</p>
+                  ) : (
+                    <p>Empate entre: {result.winners.map(w => w === userIdRef.current ? nickname : peers.get(w)?.nickname || w).join(', ')}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+          {cachipumWinner && (
+            <div className={styles.cachipumFinalWinner}>
+              <h3>🏆 Ganador del Cachipum</h3>
+              <p>{cachipumWinner === userIdRef.current ? nickname : peers.get(cachipumWinner)?.nickname || cachipumWinner}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showCachipumDecision && cachipumWinner === userIdRef.current && (
+        <div className={styles.cachipumDecision}>
+          <h3 className={styles.cachipumTitle}>¡Ganaste el Cachipum!</h3>
+          <p className={styles.cachipumSubtitle}>¿Quién parte primero?</p>
+          <div className={styles.cachipumDecisionButtons}>
+            <button
+              onClick={() => handleCachipumStarterSelection(userIdRef.current)}
+              className={styles.cachipumDecisionButton}
+            >
+              Yo parto
+            </button>
+            {Array.from(peers.keys()).map(opponentId => {
+              const opponentNickname = peers.get(opponentId)?.nickname || opponentId;
+              return (
+                <button
+                  key={opponentId}
+                  onClick={() => handleCachipumStarterSelection(opponentId)}
+                  className={styles.cachipumDecisionButton}
+                >
+                  Le doy la partida a {opponentNickname}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {cachipumStarter && !battleStarted && (
+        <div className={styles.cachipumStarterDisplay}>
+          <p className={styles.formatLabel}>Quien parte primero:</p>
+          <p className={styles.formatValue}>
+            {cachipumStarter === userIdRef.current 
+              ? nickname 
+              : peers.get(cachipumStarter)?.nickname || cachipumStarter}
+          </p>
+        </div>
+      )}
+
+      {!battleStarted && websocketConnected && allPeersConnected && hasPeers && !isReady && battleFormat && cachipumStarter && (
         <button onClick={handleReady} className={styles.readyButton}>
           Estoy listo
         </button>

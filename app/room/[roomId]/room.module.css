@@ -505,3 +505,244 @@
   font-size: 0.85rem;
   margin-top: 0.25rem;
 }
+
+/* ─── Cachipum Styles ─── */
+.cachipumContainer {
+  padding: 2rem;
+  background: #1a1a1a;
+  border: 2px solid #444;
+  border-radius: 12px;
+  margin: 1.5rem 0;
+  text-align: center;
+}
+
+.cachipumTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.5rem;
+}
+
+.cachipumSubtitle {
+  font-size: 1rem;
+  color: #888;
+  margin-bottom: 1.5rem;
+}
+
+.cachipumProgress {
+  margin-bottom: 1.5rem;
+}
+
+.cachipumProgress p {
+  color: #fff;
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.cachipumMyChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.cachipumChoiceBadge {
+  padding: 0.5rem 1rem;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+.cachipumButtons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 1.5rem 0;
+}
+
+.cachipumButton {
+  padding: 1.5rem 2rem;
+  background: #2a2a2a;
+  border: 2px solid #444;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 120px;
+}
+
+.cachipumButton:hover:not(:disabled) {
+  background: #333;
+  border-color: #667eea;
+  transform: scale(1.05);
+}
+
+.cachipumButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cachipumWaiting,
+.cachipumProcessing {
+  color: #888;
+  font-size: 0.9rem;
+  margin-top: 1rem;
+}
+
+/* ─── Cachipum Animation ─── */
+.cachipumAnimation {
+  padding: 2rem;
+  background: #1a1a1a;
+  border: 2px solid #667eea;
+  border-radius: 12px;
+  margin: 1.5rem 0;
+  text-align: center;
+  animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.cachipumRoundResult {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: #2a2a2a;
+  border-radius: 8px;
+  border: 1px solid #444;
+}
+
+.cachipumRoundResult h4 {
+  color: #fff;
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+}
+
+.cachipumRoundChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.cachipumPlayerChoice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #444;
+  min-width: 100px;
+}
+
+.cachipumPlayerName {
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.cachipumChoiceEmoji {
+  font-size: 2.5rem;
+}
+
+.cachipumChoiceLabel {
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.cachipumRoundWinner {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: #10b981;
+  border-radius: 6px;
+  color: #fff;
+  font-weight: 600;
+}
+
+.cachipumFinalWinner {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+.cachipumFinalWinner h3 {
+  color: #fff;
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.cachipumFinalWinner p {
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+/* ─── Cachipum Decision ─── */
+.cachipumDecision {
+  padding: 2rem;
+  background: #1a1a1a;
+  border: 2px solid #10b981;
+  border-radius: 12px;
+  margin: 1.5rem 0;
+  text-align: center;
+}
+
+.cachipumDecisionButtons {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.cachipumDecisionButton {
+  padding: 1rem 2rem;
+  background: #2a2a2a;
+  border: 2px solid #10b981;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cachipumDecisionButton:hover {
+  background: #10b981;
+  transform: scale(1.02);
+}
+
+.cachipumStarterDisplay {
+  padding: 1rem;
+  background: #2a2a2a;
+  border: 2px solid #444;
+  border-radius: 8px;
+  margin: 1rem 0;
+  text-align: center;
+}
