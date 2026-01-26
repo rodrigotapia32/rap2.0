@@ -1010,12 +1010,15 @@ function RoomPageContent() {
           // Usar el estado actualizado de choices
           setCachipumChoices(finalChoices => {
             // Obtener todos los usuarios de nuevo para asegurar que tenemos la lista actualizada
-            const allUsersForProcessing = [userIdRef.current, ...Array.from(peers.keys())];
+            // Usar peersRef para obtener la lista más actualizada
+            const currentPeers = peersRef.current;
+            const allUsersForProcessing = [userIdRef.current, ...Array.from(currentPeers.keys())];
             
             // Debug: verificar estado antes de procesar
             console.log('=== checkAllCachipumChoicesComplete ===');
             console.log('All users for processing:', allUsersForProcessing);
-            console.log('Peers keys:', Array.from(peers.keys()));
+            console.log('Peers keys (from ref):', Array.from(currentPeers.keys()));
+            console.log('Peers keys (from state):', Array.from(peers.keys()));
             console.log('Final choices entries:', Array.from(finalChoices.entries()));
             
             // Verificar que todos los usuarios tienen 3 opciones
