@@ -261,31 +261,25 @@ function RoomPageContent() {
     if (!isHost) return;
     (async () => {
       await restartBeatInternal();
-      // Reiniciar el tiempo del turno si hay un turno activo
-      // Recalcular startTime basándose en el nuevo currentTime del beat
+      // Reiniciar el turno al primero si hay un turno activo
       if (currentTurnRef.current && battleFormatRef.current) {
-        const now = Date.now();
-        const audio = beatAudioRef.current || beatAudio;
-        const currentBeatTime = audio ? audio.currentTime : 0;
-        const timeUntilOffset = Math.max(0, (beatIntroOffset - currentBeatTime) * 1000);
-        const newStartTime = now + timeUntilOffset;
-        const newBeatStartTime = beatIntroOffset;
+        const currentUserId = currentTurnRef.current.userId;
+        const currentTurnNum = currentTurnRef.current.turnNumber;
         
-        const updatedTurn = {
-          ...currentTurnRef.current,
-          startTime: newStartTime,
-          beatStartTime: newBeatStartTime,
-        };
-        setCurrentTurn(updatedTurn);
-        currentTurnRef.current = updatedTurn;
+        // Finalizar turno actual
+        endTurn(currentUserId, currentTurnNum);
         
-        // Reiniciar el progreso al tiempo completo
-        const config = getBattleFormatConfig(battleFormatRef.current);
-        setTurnProgress({ timeRemaining: config.timePerTurnSeconds || 60 });
+        // Reiniciar al primer turno del primer usuario
+        const orderedUsers = getOrderedUserIds();
+        if (orderedUsers.length > 0) {
+          setTimeout(() => {
+            startTurn(orderedUsers[0], 1, battleFormatRef.current!);
+          }, 500);
+        }
       }
       signalingRef.current?.send({ type: 'beat-restart' });
     })();
-  }, [isHost, restartBeatInternal, beatIntroOffset, beatAudio]);
+  }, [isHost, restartBeatInternal, getOrderedUserIds, startTurn, endTurn]);
 
   // ─── WebRTC Hook ───
   const {
