@@ -737,16 +737,26 @@ function RoomPageContent() {
             // Iniciar animación de rondas para todos
             setCurrentCachipumRoundDisplay(0);
             setShowCachipumAnimation(true);
-            // Esperar a que los resultados estén disponibles
-            const checkAndStartAnimation = () => {
-              if (cachipumResults.length > 0) {
-                startCachipumAnimation(cachipumResults, message.winnerId);
+            // Esperar a que los resultados estén disponibles usando el estado actualizado
+            setCachipumResults(currentResults => {
+              if (currentResults.length > 0) {
+                // Iniciar animación con los resultados actuales
+                setTimeout(() => {
+                  startCachipumAnimation(currentResults, message.winnerId);
+                }, 100);
               } else {
-                // Si aún no hay resultados, esperar un poco más
-                setTimeout(checkAndStartAnimation, 100);
+                // Si aún no hay resultados, esperar un poco más y verificar de nuevo
+                setTimeout(() => {
+                  setCachipumResults(prevResults => {
+                    if (prevResults.length > 0) {
+                      startCachipumAnimation(prevResults, message.winnerId);
+                    }
+                    return prevResults;
+                  });
+                }, 300);
               }
-            };
-            setTimeout(checkAndStartAnimation, 100);
+              return currentResults;
+            });
             break;
 
           case 'cachipum-restart':
