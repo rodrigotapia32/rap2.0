@@ -1134,38 +1134,35 @@ function RoomPageContent() {
   const startCachipumAnimation = useCallback((results: CachipumRoundResult[], winner: string) => {
     if (results.length === 0) return;
     
-    let currentRound = 0;
+    let currentRound = 1; // Comenzar desde la primera ronda (ya está mostrada)
     const maxRounds = results.length;
     let animationTimeout: NodeJS.Timeout | null = null;
     
     const showNextRound = () => {
-      if (currentRound < maxRounds) {
-        currentRound++;
-        setCurrentCachipumRoundDisplay(currentRound);
-        
-        // Verificar si hay ganador en esta ronda
-        const roundResult = results[currentRound - 1];
-        if (roundResult.winners.length === 1) {
-          // Hay ganador, mantener esta ronda visible por 3 segundos y luego mostrar resumen final
-          animationTimeout = setTimeout(() => {
-            setCurrentCachipumRoundDisplay(0); // 0 = mostrar resumen final
-          }, 3000);
+      // Verificar si hay ganador en la ronda actual
+      const roundResult = results[currentRound - 1];
+      if (roundResult.winners.length === 1) {
+        // Hay ganador, mantener esta ronda visible por 3 segundos y luego mostrar resumen final
+        animationTimeout = setTimeout(() => {
+          setCurrentCachipumRoundDisplay(-1); // -1 = mostrar solo resumen final (ganador)
+        }, 3000);
+      } else {
+        // Hay empate, mostrar siguiente ronda después de 2.5 segundos
+        if (currentRound < maxRounds) {
+          currentRound++;
+          setCurrentCachipumRoundDisplay(currentRound);
+          animationTimeout = setTimeout(showNextRound, 2500);
         } else {
-          // Hay empate, mostrar siguiente ronda después de 2.5 segundos
-          if (currentRound < maxRounds) {
-            animationTimeout = setTimeout(showNextRound, 2500);
-          } else {
-            // Si se acabaron las rondas y hay empate, mostrar resumen final después de 2.5 segundos
-            animationTimeout = setTimeout(() => {
-              setCurrentCachipumRoundDisplay(0);
-            }, 2500);
-          }
+          // Si se acabaron las rondas y hay empate, mostrar resumen final después de 2.5 segundos
+          animationTimeout = setTimeout(() => {
+            setCurrentCachipumRoundDisplay(-1); // -1 = mostrar solo resumen final
+          }, 2500);
         }
       }
     };
     
-    // Iniciar con la primera ronda después de un pequeño delay
-    animationTimeout = setTimeout(showNextRound, 500);
+    // Esperar un momento antes de avanzar a la siguiente ronda (la primera ya está mostrada)
+    animationTimeout = setTimeout(showNextRound, 2500);
     
     // Retornar función de limpieza
     return () => {
