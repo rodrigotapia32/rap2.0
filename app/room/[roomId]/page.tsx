@@ -262,19 +262,30 @@ function RoomPageContent() {
     (async () => {
       await restartBeatInternal();
       // Reiniciar el tiempo del turno si hay un turno activo
-      // El tiempo comienza desde el offset del beat
+      // Recalcular startTime basándose en el nuevo currentTime del beat
       if (currentTurnRef.current && battleFormatRef.current) {
+        const now = Date.now();
+        const audio = beatAudioRef.current || beatAudio;
+        const currentBeatTime = audio ? audio.currentTime : 0;
+        const timeUntilOffset = Math.max(0, (beatIntroOffset - currentBeatTime) * 1000);
+        const newStartTime = now + timeUntilOffset;
         const newBeatStartTime = beatIntroOffset;
+        
         const updatedTurn = {
           ...currentTurnRef.current,
+          startTime: newStartTime,
           beatStartTime: newBeatStartTime,
         };
         setCurrentTurn(updatedTurn);
         currentTurnRef.current = updatedTurn;
+        
+        // Reiniciar el progreso al tiempo completo
+        const config = getBattleFormatConfig(battleFormatRef.current);
+        setTurnProgress({ timeRemaining: config.timePerTurnSeconds || 60 });
       }
       signalingRef.current?.send({ type: 'beat-restart' });
     })();
-  }, [isHost, restartBeatInternal, beatIntroOffset]);
+  }, [isHost, restartBeatInternal, beatIntroOffset, beatAudio]);
 
   // ─── WebRTC Hook ───
   const {
@@ -527,15 +538,26 @@ function RoomPageContent() {
               (async () => {
                 await restartBeatInternalRef.current?.();
                 // Reiniciar el tiempo del turno si hay un turno activo
-                // El tiempo comienza desde el offset del beat
+                // Recalcular startTime basándose en el nuevo currentTime del beat
                 if (currentTurnRef.current && battleFormatRef.current) {
+                  const now = Date.now();
+                  const audio = beatAudioRef.current;
+                  const currentBeatTime = audio ? audio.currentTime : 0;
+                  const timeUntilOffset = Math.max(0, (beatIntroOffset - currentBeatTime) * 1000);
+                  const newStartTime = now + timeUntilOffset;
                   const newBeatStartTime = beatIntroOffset;
+                  
                   const updatedTurn = {
                     ...currentTurnRef.current,
+                    startTime: newStartTime,
                     beatStartTime: newBeatStartTime,
                   };
                   setCurrentTurn(updatedTurn);
                   currentTurnRef.current = updatedTurn;
+                  
+                  // Reiniciar el progreso al tiempo completo
+                  const config = getBattleFormatConfig(battleFormatRef.current);
+                  setTurnProgress({ timeRemaining: config.timePerTurnSeconds || 60 });
                 }
               })();
             }
