@@ -1056,20 +1056,39 @@ function RoomPageContent() {
             const results: CachipumRoundResult[] = [];
             for (let round = 1; round <= 3; round++) {
               const roundChoices = new Map<string, CachipumChoice>();
+              
+              // Debug antes de procesar
+              console.log(`\n=== Processing Round ${round} ===`);
+              console.log('All users for processing:', allUsersForProcessing);
+              console.log('Final choices state:', Array.from(finalChoices.entries()));
+              
               allUsersForProcessing.forEach(userId => {
                 const choices = finalChoices.get(userId);
-                console.log(`User ${userId} choices for round ${round}:`, choices);
-                if (choices && choices[round - 1]) {
+                console.log(`User ${userId}:`, {
+                  allChoices: choices,
+                  roundChoice: choices ? choices[round - 1] : undefined,
+                  hasChoice: choices && choices[round - 1] ? 'YES' : 'NO'
+                });
+                
+                if (choices && choices.length >= round && choices[round - 1]) {
                   roundChoices.set(userId, choices[round - 1]);
-                  console.log(`Added choice for user ${userId} in round ${round}:`, choices[round - 1]);
+                  console.log(`✓ Added choice for user ${userId} in round ${round}:`, choices[round - 1]);
                 } else {
-                  console.warn(`No choice found for user ${userId} in round ${round}`);
+                  console.error(`✗ No choice found for user ${userId} in round ${round}`, {
+                    choices: choices,
+                    choicesLength: choices?.length,
+                    roundIndex: round - 1
+                  });
                 }
               });
               
               // Debug: verificar que tenemos todas las elecciones
-              console.log(`Round ${round} choices:`, Array.from(roundChoices.entries()));
+              console.log(`Round ${round} final choices:`, Array.from(roundChoices.entries()));
               console.log(`Round ${round} choices size:`, roundChoices.size);
+              
+              if (roundChoices.size < allUsersForProcessing.length) {
+                console.error(`ERROR: Round ${round} only has ${roundChoices.size} choices, expected ${allUsersForProcessing.length}`);
+              }
               
               const winners = determineRoundWinners(roundChoices);
               const result: CachipumRoundResult = {
