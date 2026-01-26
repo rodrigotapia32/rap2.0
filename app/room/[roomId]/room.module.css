@@ -750,6 +750,24 @@
   text-align: center;
 }
 
+.cachipumContinueButton {
+  margin-top: 1.5rem;
+  padding: 1rem 2rem;
+  background: #10b981;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cachipumContinueButton:hover {
+  background: #059669;
+  transform: scale(1.05);
+}
+
 .cachipumPlayerName {
   color: #fff;
   font-size: 0.9rem;

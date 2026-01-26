@@ -735,11 +735,11 @@ function RoomPageContent() {
             break;
 
           case 'cachipum-winner':
-            // Solo mostrar ganador si el usuario ya completó sus 3 opciones
+            // Mostrar animación para todos los participantes que completaron sus 3 opciones
             const myChoicesCountForWinner = cachipumChoices.get(userIdRef.current)?.length || 0;
             if (myChoicesCountForWinner === 3) {
               setCachipumWinner(message.winnerId);
-              // Iniciar animación de rondas
+              // Iniciar animación de rondas para todos
               setCurrentCachipumRoundDisplay(0);
               setShowCachipumAnimation(true);
               // Usar los resultados que ya se recibieron
@@ -1121,25 +1121,13 @@ function RoomPageContent() {
         // Verificar si hay ganador en esta ronda
         const roundResult = results[currentRound - 1];
         if (roundResult.winners.length === 1) {
-          // Hay ganador, terminar animación
-          setTimeout(() => {
-            setShowCachipumAnimation(false);
-            if (winner === userIdRef.current) {
-              setShowCachipumDecision(true);
-            }
-          }, 2000);
+          // Hay ganador, mostrar ganador pero no cerrar automáticamente
+          // El usuario cerrará manualmente
         } else if (currentRound < maxRounds) {
-          // Hay empate, mostrar siguiente ronda
+          // Hay empate, mostrar siguiente ronda después de 2 segundos
           setTimeout(showNextRound, 2000);
-        } else {
-          // Se acabaron las rondas, terminar
-          setTimeout(() => {
-            setShowCachipumAnimation(false);
-            if (winner === userIdRef.current) {
-              setShowCachipumDecision(true);
-            }
-          }, 2000);
         }
+        // Si se acabaron las rondas, mantener la última ronda visible
       }
     };
     
