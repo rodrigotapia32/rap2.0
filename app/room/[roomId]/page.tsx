@@ -1046,18 +1046,27 @@ function RoomPageContent() {
         setTimeout(() => {
           // Usar el estado actualizado de choices
           setCachipumChoices(finalChoices => {
+            // Debug: verificar el estado de choices antes de procesar
+            console.log('Final choices state:', Array.from(finalChoices.entries()));
+            console.log('All users:', allUsers);
+            
             const results: CachipumRoundResult[] = [];
             for (let round = 1; round <= 3; round++) {
               const roundChoices = new Map<string, CachipumChoice>();
               allUsers.forEach(userId => {
                 const choices = finalChoices.get(userId);
+                console.log(`User ${userId} choices for round ${round}:`, choices);
                 if (choices && choices[round - 1]) {
                   roundChoices.set(userId, choices[round - 1]);
+                  console.log(`Added choice for user ${userId} in round ${round}:`, choices[round - 1]);
+                } else {
+                  console.warn(`No choice found for user ${userId} in round ${round}`);
                 }
               });
               
               // Debug: verificar que tenemos todas las elecciones
               console.log(`Round ${round} choices:`, Array.from(roundChoices.entries()));
+              console.log(`Round ${round} choices size:`, roundChoices.size);
               
               const winners = determineRoundWinners(roundChoices);
               const result: CachipumRoundResult = {
