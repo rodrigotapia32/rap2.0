@@ -1043,11 +1043,26 @@ function RoomPageContent() {
       
       if (allComplete && isHost) {
         // Procesar rondas con las opciones actuales
+        // Usar un setTimeout más largo para asegurar que todos los mensajes se hayan procesado
         setTimeout(() => {
           // Usar el estado actualizado de choices
           setCachipumChoices(finalChoices => {
             // Obtener todos los usuarios de nuevo para asegurar que tenemos la lista actualizada
             const allUsersForProcessing = [userIdRef.current, ...Array.from(peers.keys())];
+            
+            // Verificar que todos los usuarios tienen 3 opciones
+            const allHave3Choices = allUsersForProcessing.every(userId => {
+              const choices = finalChoices.get(userId);
+              return choices && choices.length === 3;
+            });
+            
+            if (!allHave3Choices) {
+              console.error('ERROR: Not all users have 3 choices yet!', {
+                allUsers: allUsersForProcessing,
+                choicesState: Array.from(finalChoices.entries())
+              });
+              return finalChoices; // No procesar si no todos tienen 3 opciones
+            }
             
             // Debug: verificar el estado de choices antes de procesar
             console.log('Final choices state:', Array.from(finalChoices.entries()));
