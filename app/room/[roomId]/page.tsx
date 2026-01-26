@@ -1717,7 +1717,9 @@ function RoomPageContent() {
               if (!currentResult) return null;
               
               const allUsers = Array.from(currentResult.choices.entries());
+              // hasWinner es true solo si hay exactamente un ganador (no empate)
               const hasWinner = currentResult.winners.length === 1;
+              const isFinalRound = currentCachipumRoundDisplay === cachipumResults.length;
               
               return (
                 <>
