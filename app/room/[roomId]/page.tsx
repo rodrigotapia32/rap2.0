@@ -1569,7 +1569,8 @@ function RoomPageContent() {
 
       {showCachipum && !cachipumStarter && !showCachipumAnimation && (
         <div className={styles.cachipumContainer}>
-          <h3 className={styles.cachipumTitle}>Cachipum - Elige tus 3 opciones</h3>
+          <div>
+            <h3 className={styles.cachipumTitle}>Cachipum - Elige tus 3 opciones</h3>
           <p className={styles.cachipumSubtitle}>
             Elige 3 opciones (una por ronda). El ganador decidirá quién parte primero.
           </p>

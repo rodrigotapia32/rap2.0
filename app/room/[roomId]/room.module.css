@@ -508,12 +508,29 @@
 
 /* ─── Cachipum Styles ─── */
 .cachipumContainer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
   padding: 2rem;
+}
+
+.cachipumContainer > div {
   background: #1a1a1a;
   border: 2px solid #444;
   border-radius: 12px;
-  margin: 1.5rem 0;
+  padding: 2rem;
+  max-width: 600px;
+  width: 100%;
   text-align: center;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .cachipumTitle {
@@ -597,12 +614,29 @@
 
 /* ─── Cachipum Animation ─── */
 .cachipumAnimation {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
   padding: 2rem;
+}
+
+.cachipumAnimation > div {
   background: #1a1a1a;
   border: 2px solid #667eea;
   border-radius: 12px;
-  margin: 1.5rem 0;
+  padding: 2rem;
+  max-width: 700px;
+  width: 100%;
   text-align: center;
+  max-height: 90vh;
+  overflow-y: auto;
   animation: fadeIn 0.5s ease-in;
 }
 
@@ -706,11 +740,26 @@
 
 /* ─── Cachipum Decision ─── */
 .cachipumDecision {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
   padding: 2rem;
+}
+
+.cachipumDecision > div {
   background: #1a1a1a;
   border: 2px solid #10b981;
   border-radius: 12px;
-  margin: 1.5rem 0;
+  padding: 2rem;
+  max-width: 500px;
+  width: 100%;
   text-align: center;
 }
 
