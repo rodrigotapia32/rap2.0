@@ -531,27 +531,12 @@ function RoomPageContent() {
             if (!isHostRef.current) {
               (async () => {
                 await restartBeatInternalRef.current?.();
-                // Reiniciar el tiempo del turno si hay un turno activo
-                // Recalcular startTime basándose en el nuevo currentTime del beat
-                if (currentTurnRef.current && battleFormatRef.current) {
-                  const now = Date.now();
-                  const audio = beatAudioRef.current;
-                  const currentBeatTime = audio ? audio.currentTime : 0;
-                  const timeUntilOffset = Math.max(0, (beatIntroOffset - currentBeatTime) * 1000);
-                  const newStartTime = now + timeUntilOffset;
-                  const newBeatStartTime = beatIntroOffset;
-                  
-                  const updatedTurn = {
-                    ...currentTurnRef.current,
-                    startTime: newStartTime,
-                    beatStartTime: newBeatStartTime,
-                  };
-                  setCurrentTurn(updatedTurn);
-                  currentTurnRef.current = updatedTurn;
-                  
-                  // Reiniciar el progreso al tiempo completo
-                  const config = getBattleFormatConfig(battleFormatRef.current);
-                  setTurnProgress({ timeRemaining: config.timePerTurnSeconds || 60 });
+                // Reiniciar el turno al primero si hay un turno activo
+                // El host enviará el nuevo turn-started después de reiniciar
+                if (currentTurnRef.current) {
+                  setCurrentTurn(null);
+                  currentTurnRef.current = null;
+                  setTurnProgress(null);
                 }
               })();
             }
