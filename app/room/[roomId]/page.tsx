@@ -649,54 +649,10 @@ function RoomPageContent() {
                     });
                     
                     if (allComplete) {
-                      // Procesar rondas con las opciones actuales
-                      const results: CachipumRoundResult[] = [];
-                      for (let round = 1; round <= 3; round++) {
-                        const roundChoices = new Map<string, CachipumChoice>();
-                        allUsers.forEach(userId => {
-                          const choices = next.get(userId);
-                          if (choices && choices[round - 1]) {
-                            roundChoices.set(userId, choices[round - 1]);
-                          }
-                        });
-                        const winners = determineRoundWinners(roundChoices);
-                        const result: CachipumRoundResult = {
-                          round,
-                          choices: roundChoices,
-                          winners,
-                        };
-                        results.push(result);
-                        signalingRef.current?.send({
-                          type: 'cachipum-round-result',
-                          round,
-                          choices: Object.fromEntries(roundChoices),
-                          winners,
-                        });
-                      }
-          setCachipumResults(results);
-          const winner = determineCachipumWinner(results);
-          if (winner) {
-            setCachipumWinner(winner);
-            signalingRef.current?.send({
-              type: 'cachipum-winner',
-              winnerId: winner,
-            });
-            // Iniciar animación de rondas para el host
-            setCurrentCachipumRoundDisplay(0);
-            setShowCachipumAnimation(true);
-            startCachipumAnimation(results, winner);
-          } else {
-            // Si hay empate en las 3 rondas, reiniciar cachipum
-            setCachipumChoices(new Map());
-            setCachipumResults([]);
-            setCachipumRound(1);
-            setCachipumWinner(null);
-            setShowCachipumAnimation(false);
-            setCurrentCachipumRoundDisplay(0);
-            signalingRef.current?.send({
-              type: 'cachipum-restart',
-            });
-          }
+                      // Usar checkAllCachipumChoicesComplete para procesar (evitar duplicación)
+                      setTimeout(() => {
+                        checkAllCachipumChoicesComplete();
+                      }, 100);
                     }
                   }, 200);
                 }
