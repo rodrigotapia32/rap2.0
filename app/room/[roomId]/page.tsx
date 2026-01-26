@@ -571,6 +571,15 @@ function RoomPageContent() {
             // Si el beat recibido es el actualmente seleccionado, actualizar el offset
             if (message.beatNumber === selectedBeatRef.current) {
               setBeatIntroOffset(message.offsetSeconds);
+              // Si hay un turno activo, actualizar el beatStartTime para mantener sincronización
+              if (currentTurnRef.current) {
+                const updatedTurn = {
+                  ...currentTurnRef.current,
+                  beatStartTime: message.offsetSeconds,
+                };
+                setCurrentTurn(updatedTurn);
+                currentTurnRef.current = updatedTurn;
+              }
             }
             break;
         }
