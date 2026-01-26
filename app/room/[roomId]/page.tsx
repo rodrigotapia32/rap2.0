@@ -1741,23 +1741,22 @@ function RoomPageContent() {
               const currentResult = cachipumResults[currentCachipumRoundDisplay - 1];
               if (!currentResult) return null;
               
-              // Obtener todos los usuarios y sus elecciones
-              // Asegurarse de incluir todos los usuarios, incluso si no están en choices
-              const allUsersFromChoices = Array.from(currentResult.choices.entries());
-              const allUsersInRoom = [userIdRef.current, ...Array.from(peers.keys())];
-              
-              // Crear un array completo con todos los usuarios y sus elecciones
-              const allUsers = allUsersInRoom.map(userId => {
-                const choice = currentResult.choices.get(userId);
-                return [userId, choice] as [string, CachipumChoice | undefined];
-              }).filter(([_, choice]) => choice !== undefined) as [string, CachipumChoice][];
+              // Obtener todos los usuarios y sus elecciones directamente del resultado
+              const allUsers = Array.from(currentResult.choices.entries());
               
               // Debug: verificar que tenemos ambos usuarios
               console.log('Current result:', currentResult);
-              console.log('All users from choices:', allUsersFromChoices);
-              console.log('All users in room:', allUsersInRoom);
-              console.log('All users (combined):', allUsers);
+              console.log('Current result choices Map size:', currentResult.choices.size);
+              console.log('All users from choices:', allUsers);
+              console.log('All users count:', allUsers.length);
               console.log('Winners:', currentResult.winners);
+              
+              // Si solo hay un usuario en choices, hay un problema
+              if (allUsers.length < 2) {
+                console.error('ERROR: Solo hay', allUsers.length, 'usuario(s) en choices, debería haber 2');
+                console.error('Choices map:', currentResult.choices);
+                console.error('All users in room:', [userIdRef.current, ...Array.from(peers.keys())]);
+              }
               
               // hasWinner es true solo si hay exactamente un ganador (no empate)
               const hasWinner = currentResult.winners.length === 1;
