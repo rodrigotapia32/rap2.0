@@ -1699,6 +1699,7 @@ function RoomPageContent() {
                 </button>
               );
             })}
+            </div>
           </div>
         </div>
       )}
