@@ -735,18 +735,22 @@ function RoomPageContent() {
       const beatStartTime = currentTurn.beatStartTime; // Este es el offset del beat
       
       // El tiempo comienza a contar desde el offset del beat
-      // Si el beat aún no ha llegado al offset, mostrar el tiempo completo
+      // Si el beat aún no ha llegado al offset, mostrar el tiempo completo y NO avanzar
       if (currentBeatTime < beatStartTime) {
         setTurnProgress({ timeRemaining: duration });
         return;
       }
 
       // Calcular tiempo transcurrido desde el offset
+      // Solo contar el tiempo que ha pasado DESPUÉS de llegar al offset
       const elapsed = currentBeatTime - beatStartTime;
       const remaining = Math.max(0, duration - elapsed);
       const remainingSeconds = Math.ceil(remaining);
 
-      setTurnProgress({ timeRemaining: remainingSeconds });
+      // Solo actualizar si el tiempo restante es válido
+      if (remainingSeconds >= 0 && remainingSeconds <= duration) {
+        setTurnProgress({ timeRemaining: remainingSeconds });
+      }
 
       if (remaining <= 0 && isHost) {
         nextTurn();
