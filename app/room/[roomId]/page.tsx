@@ -636,22 +636,26 @@ function RoomPageContent() {
                 const existing = next.get(message.userId) || [];
                 const updated = [...existing, message.choice];
                 next.set(message.userId, updated);
-                
-                // Si es host y todos han completado, procesar rondas
-                if (isHostRef.current) {
-                  setTimeout(() => {
+                return next;
+              });
+              
+              // Si es host, verificar si todos han completado después de actualizar el estado
+              if (isHostRef.current) {
+                setTimeout(() => {
+                  setCachipumChoices(currentChoices => {
                     const allUsers = [userIdRef.current, ...Array.from(peers.keys())];
                     const allComplete = allUsers.every(userId => {
-                      const choices = next.get(userId);
+                      const choices = currentChoices.get(userId);
                       return choices && choices.length === 3;
                     });
+                    
                     if (allComplete) {
-                      // Procesar rondas con las opciones actualizadas
+                      // Procesar rondas con las opciones actuales
                       const results: CachipumRoundResult[] = [];
                       for (let round = 1; round <= 3; round++) {
                         const roundChoices = new Map<string, CachipumChoice>();
                         allUsers.forEach(userId => {
-                          const choices = next.get(userId);
+                          const choices = currentChoices.get(userId);
                           if (choices && choices[round - 1]) {
                             roundChoices.set(userId, choices[round - 1]);
                           }
@@ -687,11 +691,11 @@ function RoomPageContent() {
                         }, 5000);
                       }
                     }
-                  }, 100);
-                }
-                
-                return next;
-              });
+                    
+                    return currentChoices;
+                  });
+                }, 200);
+              }
             }
             break;
 
