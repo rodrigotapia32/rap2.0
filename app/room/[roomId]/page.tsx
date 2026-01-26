@@ -1046,14 +1046,17 @@ function RoomPageContent() {
         setTimeout(() => {
           // Usar el estado actualizado de choices
           setCachipumChoices(finalChoices => {
+            // Obtener todos los usuarios de nuevo para asegurar que tenemos la lista actualizada
+            const allUsersForProcessing = [userIdRef.current, ...Array.from(peers.keys())];
+            
             // Debug: verificar el estado de choices antes de procesar
             console.log('Final choices state:', Array.from(finalChoices.entries()));
-            console.log('All users:', allUsers);
+            console.log('All users for processing:', allUsersForProcessing);
             
             const results: CachipumRoundResult[] = [];
             for (let round = 1; round <= 3; round++) {
               const roundChoices = new Map<string, CachipumChoice>();
-              allUsers.forEach(userId => {
+              allUsersForProcessing.forEach(userId => {
                 const choices = finalChoices.get(userId);
                 console.log(`User ${userId} choices for round ${round}:`, choices);
                 if (choices && choices[round - 1]) {
