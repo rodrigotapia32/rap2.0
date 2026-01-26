@@ -1716,7 +1716,14 @@ function RoomPageContent() {
               const currentResult = cachipumResults[currentCachipumRoundDisplay - 1];
               if (!currentResult) return null;
               
+              // Obtener todos los usuarios y sus elecciones
               const allUsers = Array.from(currentResult.choices.entries());
+              
+              // Debug: verificar que tenemos ambos usuarios
+              console.log('Current result:', currentResult);
+              console.log('All users:', allUsers);
+              console.log('Winners:', currentResult.winners);
+              
               // hasWinner es true solo si hay exactamente un ganador (no empate)
               const hasWinner = currentResult.winners.length === 1;
               const isFinalRound = currentCachipumRoundDisplay === cachipumResults.length;
