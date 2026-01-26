@@ -1044,29 +1044,35 @@ function RoomPageContent() {
       if (allComplete && isHost) {
         // Procesar rondas con las opciones actuales
         setTimeout(() => {
-          const results: CachipumRoundResult[] = [];
-          for (let round = 1; round <= 3; round++) {
-            const roundChoices = new Map<string, CachipumChoice>();
-            allUsers.forEach(userId => {
-              const choices = currentChoices.get(userId);
-              if (choices && choices[round - 1]) {
-                roundChoices.set(userId, choices[round - 1]);
-              }
-            });
-            const winners = determineRoundWinners(roundChoices);
-            const result: CachipumRoundResult = {
-              round,
-              choices: roundChoices,
-              winners,
-            };
-            results.push(result);
-            signalingRef.current?.send({
-              type: 'cachipum-round-result',
-              round,
-              choices: Object.fromEntries(roundChoices),
-              winners,
-            });
-          }
+          // Usar el estado actualizado de choices
+          setCachipumChoices(finalChoices => {
+            const results: CachipumRoundResult[] = [];
+            for (let round = 1; round <= 3; round++) {
+              const roundChoices = new Map<string, CachipumChoice>();
+              allUsers.forEach(userId => {
+                const choices = finalChoices.get(userId);
+                if (choices && choices[round - 1]) {
+                  roundChoices.set(userId, choices[round - 1]);
+                }
+              });
+              
+              // Debug: verificar que tenemos todas las elecciones
+              console.log(`Round ${round} choices:`, Array.from(roundChoices.entries()));
+              
+              const winners = determineRoundWinners(roundChoices);
+              const result: CachipumRoundResult = {
+                round,
+                choices: roundChoices,
+                winners,
+              };
+              results.push(result);
+              signalingRef.current?.send({
+                type: 'cachipum-round-result',
+                round,
+                choices: Object.fromEntries(roundChoices),
+                winners,
+              });
+            }
           setCachipumResults(results);
           const winner = determineCachipumWinner(results);
           if (winner) {
