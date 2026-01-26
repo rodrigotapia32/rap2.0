@@ -1106,7 +1106,7 @@ function RoomPageContent() {
             
             return finalChoices;
           });
-        }, 100);
+        }, 500); // Aumentar timeout para asegurar que todos los mensajes se hayan procesado
       }
       
       return currentChoices;
