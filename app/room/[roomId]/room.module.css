@@ -202,8 +202,16 @@
   flex-wrap: wrap;
 }
 
-.beatButton {
+.beatItem {
   flex: 1;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.beatButton {
+  width: 100%;
   padding: 1rem;
   background: #2a2a2a;
   border: 2px solid #444;
@@ -222,6 +230,34 @@
 
 .beatButtonActive {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+}
+
+.beatOffsetControl {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.beatOffsetLabel {
+  color: #888;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.beatOffsetInput {
+  width: 100%;
+  padding: 0.5rem;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.85rem;
+  text-align: center;
+  outline: none;
+}
+
+.beatOffsetInput:focus {
   border-color: #667eea;
 }
 
