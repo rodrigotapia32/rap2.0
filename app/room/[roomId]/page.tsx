@@ -1720,14 +1720,14 @@ function RoomPageContent() {
                       const isWinner = hasWinner && currentResult.winners[0] === userId;
                       return (
                         <React.Fragment key={userId}>
+                          {index > 0 && (
+                            <div className={styles.cachipumVsSeparator}>VS</div>
+                          )}
                           <div className={`${styles.cachipumVsPlayer} ${isWinner ? styles.cachipumVsWinner : ''}`}>
                             <div className={styles.cachipumVsPlayerName}>{userNickname}</div>
                             <div className={styles.cachipumVsChoiceEmoji}>{getCachipumEmoji(choice)}</div>
                             <div className={styles.cachipumVsChoiceLabel}>{getCachipumLabel(choice)}</div>
                           </div>
-                          {index === 0 && allUsers.length > 1 && (
-                            <div className={styles.cachipumVsSeparator}>VS</div>
-                          )}
                         </React.Fragment>
                       );
                     })}
