@@ -1103,8 +1103,8 @@ function RoomPageContent() {
                   type: 'cachipum-winner',
                   winnerId: winner,
                 });
-                // Iniciar animación de rondas
-                setCurrentCachipumRoundDisplay(0);
+                // Iniciar animación de rondas - comenzar con la primera ronda
+                setCurrentCachipumRoundDisplay(1);
                 setShowCachipumAnimation(true);
                 startCachipumAnimation(results, winner);
               } else {
@@ -1750,74 +1750,10 @@ function RoomPageContent() {
       {showCachipumAnimation && cachipumResults.length > 0 && (
         <div className={styles.cachipumAnimation}>
           <div>
-            {currentCachipumRoundDisplay === 0 ? (
-              // Mostrar resumen final con todas las rondas
+            {currentCachipumRoundDisplay === -1 ? (
+              // Mostrar solo resumen final (ganador)
               <>
                 <h3 className={styles.cachipumTitle}>Resultados del Cachipum</h3>
-                
-                {/* Mostrar todas las rondas */}
-                {cachipumResults.map((result, index) => {
-                  const roundNumber = index + 1;
-                  const hasWinner = result.winners.length === 1;
-                  const isWinningRound = hasWinner && cachipumWinner && result.winners.includes(cachipumWinner);
-                  
-                  // Obtener todos los usuarios de la sala para asegurar que mostramos todos
-                  const allUsersInRoom = [userIdRef.current, ...Array.from(peers.keys())];
-                  
-                  return (
-                    <div 
-                      key={roundNumber} 
-                      className={`${styles.cachipumRoundResult} ${isWinningRound ? styles.cachipumWinningRound : ''}`}
-                    >
-                      <h4 className={styles.cachipumRoundTitle}>
-                        Ronda {roundNumber}
-                        {isWinningRound && <span className={styles.cachipumWinningBadge}>🏆 Ganador</span>}
-                      </h4>
-                      
-                      <div className={styles.cachipumVsContainer}>
-                        {allUsersInRoom.map((userId, idx) => {
-                          const choice = result.choices.get(userId);
-                          const userNickname = userId === userIdRef.current 
-                            ? nickname 
-                            : peers.get(userId)?.nickname || userId;
-                          const isWinner = hasWinner && result.winners[0] === userId;
-                          
-                          return (
-                            <React.Fragment key={userId}>
-                              {idx > 0 && (
-                                <div className={styles.cachipumVsSeparator}>VS</div>
-                              )}
-                              <div className={`${styles.cachipumVsPlayer} ${isWinner ? styles.cachipumVsWinner : ''} ${!choice ? styles.cachipumVsPlayerMissing : ''}`}>
-                                <div className={styles.cachipumVsPlayerName}>{userNickname}</div>
-                                {choice ? (
-                                  <>
-                                    <div className={styles.cachipumVsChoiceEmoji}>{getCachipumEmoji(choice)}</div>
-                                    <div className={styles.cachipumVsChoiceLabel}>{getCachipumLabel(choice)}</div>
-                                  </>
-                                ) : (
-                                  <>
-                                    <div className={styles.cachipumVsChoiceEmoji}>❓</div>
-                                    <div className={styles.cachipumVsChoiceLabel}>Sin elección</div>
-                                  </>
-                                )}
-                              </div>
-                            </React.Fragment>
-                          );
-                        })}
-                      </div>
-                      
-                      {hasWinner ? (
-                        <div className={styles.cachipumRoundWinner}>
-                          <p>🏆 Ganador: {result.winners[0] === userIdRef.current ? nickname : peers.get(result.winners[0])?.nickname || result.winners[0]}</p>
-                        </div>
-                      ) : (
-                        <div className={styles.cachipumRoundTie}>
-                          <p>Empate</p>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
                 
                 {/* Mostrar ganador final */}
                 {cachipumWinner && (
@@ -1852,7 +1788,7 @@ function RoomPageContent() {
                   )}
                 </div>
               </>
-            ) : (
+            ) : currentCachipumRoundDisplay > 0 ? (
               // Mostrar ronda individual secuencialmente
               (() => {
                 const result = cachipumResults[currentCachipumRoundDisplay - 1];
