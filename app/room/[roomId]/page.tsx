@@ -766,7 +766,7 @@ function RoomPageContent() {
         turnProgressIntervalRef.current = null;
       }
     };
-  }, [battleStarted, currentTurn, battleFormat, isHost, nextTurn, isBeatPlaying, beatAudio]);
+  }, [battleStarted, currentTurn, battleFormat, isHost, nextTurn, isBeatPlaying, beatAudio, beatIntroOffset]);
 
   // ─── Beat Change (host only) ───
   const handleBeatChange = useCallback((beatNumber: number) => {
