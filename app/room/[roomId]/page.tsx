@@ -1843,7 +1843,7 @@ function RoomPageContent() {
                   </>
                 );
               })()
-            )}
+            ) : null}
           </div>
         </div>
       )}
