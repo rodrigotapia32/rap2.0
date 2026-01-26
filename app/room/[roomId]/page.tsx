@@ -723,7 +723,10 @@ function RoomPageContent() {
 
     const updateProgress = () => {
       // Solo actualizar si el beat está reproduciéndose
-      if (!isBeatPlaying) return;
+      if (!isBeatPlaying) {
+        // Si está pausado, mantener el tiempo actual sin actualizar
+        return;
+      }
 
       const audio = beatAudioRef.current || beatAudio;
       if (!audio) return;
