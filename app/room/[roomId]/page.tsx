@@ -136,8 +136,15 @@ function RoomPageContent() {
     if (!isHost) return;
 
     // El tiempo del turno comienza desde el offset del beat
+    // startTime es el timestamp del sistema cuando el beat llegará al offset
     const beatStartTime = beatIntroOffset;
-    const startTime = Date.now() + (beatIntroOffset * 1000);
+    // Calcular cuándo el beat llegará al offset (ahora + tiempo hasta el offset)
+    const now = Date.now();
+    const audio = beatAudioRef.current || beatAudio;
+    const currentBeatTime = audio ? audio.currentTime : 0;
+    const timeUntilOffset = Math.max(0, (beatIntroOffset - currentBeatTime) * 1000);
+    const startTime = now + timeUntilOffset;
+    
     setCurrentTurn({ userId, turnNumber, startTime, beatStartTime });
     currentTurnRef.current = { userId, turnNumber, startTime, beatStartTime };
 
@@ -152,7 +159,7 @@ function RoomPageContent() {
     // Inicializar progreso según formato
     const config = getBattleFormatConfig(format);
     setTurnProgress({ timeRemaining: config.timePerTurnSeconds || 60 });
-  }, [isHost, beatIntroOffset]);
+  }, [isHost, beatIntroOffset, beatAudio]);
 
   const endTurn = useCallback((userId: string, turnNumber: number) => {
     if (!isHost) return;
@@ -732,22 +739,20 @@ function RoomPageContent() {
         return;
       }
 
-      const audio = beatAudioRef.current || beatAudio;
-      if (!audio) return;
-
-      const currentBeatTime = audio.currentTime;
-      const beatStartTime = currentTurn.beatStartTime; // Este es el offset del beat
+      // Usar el tiempo del sistema para sincronizar entre usuarios
+      // startTime es el timestamp cuando el beat llegó al offset
+      const now = Date.now();
+      const startTime = currentTurn.startTime;
       
-      // El tiempo comienza a contar desde el offset del beat
-      // Si el beat aún no ha llegado al offset, mostrar el tiempo completo y NO avanzar
-      if (currentBeatTime < beatStartTime) {
+      // Si aún no ha llegado el tiempo del offset, mostrar el tiempo completo
+      if (now < startTime) {
         setTurnProgress({ timeRemaining: duration });
         return;
       }
 
-      // Calcular tiempo transcurrido desde el offset
-      // Solo contar el tiempo que ha pasado DESPUÉS de llegar al offset
-      const elapsed = currentBeatTime - beatStartTime;
+      // Calcular tiempo transcurrido desde que el beat llegó al offset
+      // Usar tiempo del sistema para sincronización precisa
+      const elapsed = (now - startTime) / 1000; // en segundos
       const remaining = Math.max(0, duration - elapsed);
       const remainingSeconds = Math.ceil(remaining);
 
