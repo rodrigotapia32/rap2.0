@@ -1073,30 +1073,33 @@ function RoomPageContent() {
                 winners,
               });
             }
-          setCachipumResults(results);
-          const winner = determineCachipumWinner(results);
-          if (winner) {
-            setCachipumWinner(winner);
-            signalingRef.current?.send({
-              type: 'cachipum-winner',
-              winnerId: winner,
-            });
-            // Iniciar animación de rondas para el host
-            setCurrentCachipumRoundDisplay(0);
-            setShowCachipumAnimation(true);
-            startCachipumAnimation(results, winner);
-          } else {
-            // Si hay empate en las 3 rondas, reiniciar cachipum
-            setCachipumChoices(new Map());
-            setCachipumResults([]);
-            setCachipumRound(1);
-            setCachipumWinner(null);
-            setShowCachipumAnimation(false);
-            setCurrentCachipumRoundDisplay(0);
-            signalingRef.current?.send({
-              type: 'cachipum-restart',
-            });
-          }
+            setCachipumResults(results);
+            const winner = determineCachipumWinner(results);
+            if (winner) {
+              setCachipumWinner(winner);
+              signalingRef.current?.send({
+                type: 'cachipum-winner',
+                winnerId: winner,
+              });
+              // Iniciar animación de rondas para el host
+              setCurrentCachipumRoundDisplay(0);
+              setShowCachipumAnimation(true);
+              startCachipumAnimation(results, winner);
+            } else {
+              // Si hay empate en las 3 rondas, reiniciar cachipum
+              setCachipumChoices(new Map());
+              setCachipumResults([]);
+              setCachipumRound(1);
+              setCachipumWinner(null);
+              setShowCachipumAnimation(false);
+              setCurrentCachipumRoundDisplay(0);
+              signalingRef.current?.send({
+                type: 'cachipum-restart',
+              });
+            }
+            
+            return finalChoices;
+          });
         }, 100);
       }
       
