@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams, useParams } from 'next/navigation';
-import { useEffect, useState, useRef, Suspense, useCallback } from 'react';
+import React, { useEffect, useState, useRef, Suspense, useCallback } from 'react';
 import { useWebRTC, WebRTCState } from '@/hooks/useWebRTC';
 import { useAudioControls } from '@/hooks/useAudioControls';
 import { useDeviceSelection } from '@/hooks/useDeviceSelection';
