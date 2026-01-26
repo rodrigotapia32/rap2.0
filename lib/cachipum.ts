@@ -66,7 +66,18 @@ export function determineRoundWinners(choices: Map<string, CachipumChoice>): str
   }
   
   // Encontrar el máximo de victorias
-  const maxWins = Math.max(...Array.from(wins.values()));
+  const winValues = Array.from(wins.values());
+  if (winValues.length === 0) {
+    // Si no hay victorias (todos empataron), todos son ganadores (empate)
+    return userIds;
+  }
+  
+  const maxWins = Math.max(...winValues);
+  
+  // Si todos tienen 0 victorias (empate), todos son ganadores
+  if (maxWins === 0) {
+    return userIds;
+  }
   
   // Agregar todos los que tienen el máximo de victorias
   wins.forEach((winsCount, userId) => {
