@@ -1006,10 +1006,18 @@ function RoomPageContent() {
             // Obtener todos los usuarios de nuevo para asegurar que tenemos la lista actualizada
             const allUsersForProcessing = [userIdRef.current, ...Array.from(peers.keys())];
             
+            // Debug: verificar estado antes de procesar
+            console.log('=== checkAllCachipumChoicesComplete ===');
+            console.log('All users for processing:', allUsersForProcessing);
+            console.log('Peers keys:', Array.from(peers.keys()));
+            console.log('Final choices entries:', Array.from(finalChoices.entries()));
+            
             // Verificar que todos los usuarios tienen 3 opciones
             const allHave3Choices = allUsersForProcessing.every(userId => {
               const choices = finalChoices.get(userId);
-              return choices && choices.length === 3;
+              const has3 = choices && choices.length === 3;
+              console.log(`User ${userId} has 3 choices:`, has3, choices);
+              return has3;
             });
             
             if (!allHave3Choices) {
