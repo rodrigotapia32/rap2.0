@@ -210,8 +210,8 @@ function RoomPageContent() {
     setTimeout(async () => {
       const audio = beatAudioRef.current || beatAudio;
       if (audio) {
-        // Ajustar tiempo inicial considerando el offset de intro
-        audio.currentTime = beatIntroOffset;
+        // El beat se reproduce desde el segundo 0
+        audio.currentTime = 0;
         const success = await playBeat();
 
         if (isHost && success && signalingRef.current) {
@@ -222,13 +222,13 @@ function RoomPageContent() {
             });
           }, 50);
 
-          // Iniciar primer turno después de que el beat empiece
+          // Iniciar primer turno inmediatamente (el tiempo comenzará a contar desde el offset)
           if (battleFormatRef.current) {
             const orderedUsers = getOrderedUserIds();
             if (orderedUsers.length > 0) {
               setTimeout(() => {
                 startTurn(orderedUsers[0], 1, battleFormatRef.current!);
-              }, (beatIntroOffset * 1000) + 100);
+              }, 100);
             }
           }
         }
@@ -720,8 +720,17 @@ function RoomPageContent() {
       if (!audio) return;
 
       const currentBeatTime = audio.currentTime;
-      const beatStartTime = currentTurn.beatStartTime;
-      const elapsed = Math.max(0, currentBeatTime - beatStartTime);
+      const beatStartTime = currentTurn.beatStartTime; // Este es el offset del beat
+      
+      // El tiempo comienza a contar desde el offset del beat
+      // Si el beat aún no ha llegado al offset, mostrar el tiempo completo
+      if (currentBeatTime < beatStartTime) {
+        setTurnProgress({ timeRemaining: duration });
+        return;
+      }
+
+      // Calcular tiempo transcurrido desde el offset
+      const elapsed = currentBeatTime - beatStartTime;
       const remaining = Math.max(0, duration - elapsed);
       const remainingSeconds = Math.ceil(remaining);
 
