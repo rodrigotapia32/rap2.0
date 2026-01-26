@@ -1730,11 +1730,21 @@ function RoomPageContent() {
               if (!currentResult) return null;
               
               // Obtener todos los usuarios y sus elecciones
-              const allUsers = Array.from(currentResult.choices.entries());
+              // Asegurarse de incluir todos los usuarios, incluso si no están en choices
+              const allUsersFromChoices = Array.from(currentResult.choices.entries());
+              const allUsersInRoom = [userIdRef.current, ...Array.from(peers.keys())];
+              
+              // Crear un array completo con todos los usuarios y sus elecciones
+              const allUsers = allUsersInRoom.map(userId => {
+                const choice = currentResult.choices.get(userId);
+                return [userId, choice] as [string, CachipumChoice | undefined];
+              }).filter(([_, choice]) => choice !== undefined) as [string, CachipumChoice][];
               
               // Debug: verificar que tenemos ambos usuarios
               console.log('Current result:', currentResult);
-              console.log('All users:', allUsers);
+              console.log('All users from choices:', allUsersFromChoices);
+              console.log('All users in room:', allUsersInRoom);
+              console.log('All users (combined):', allUsers);
               console.log('Winners:', currentResult.winners);
               
               // hasWinner es true solo si hay exactamente un ganador (no empate)
