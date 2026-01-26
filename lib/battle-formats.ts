@@ -20,6 +20,7 @@ export const BATTLE_FORMATS: Record<BattleFormat, BattleFormatConfig> = {
     description: '4 versos de 4 líneas cada uno',
     verses: 4,
     linesPerVerse: 4,
+    timePerTurnSeconds: 60, // 60 segundos por turno
   },
   '8x8': {
     format: '8x8',
@@ -27,6 +28,7 @@ export const BATTLE_FORMATS: Record<BattleFormat, BattleFormatConfig> = {
     description: '8 versos de 8 líneas cada uno',
     verses: 8,
     linesPerVerse: 8,
+    timePerTurnSeconds: 120, // 120 segundos por turno
   },
   'minuto-libre': {
     format: 'minuto-libre',

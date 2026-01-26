@@ -49,7 +49,7 @@ function RoomPageContent() {
   const [isBeatPlaying, setIsBeatPlaying] = useState(false);
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [battleFormat, setBattleFormat] = useState<BattleFormat | null>(null);
-  const [currentTurn, setCurrentTurn] = useState<{ userId: string; turnNumber: number; startTime: number } | null>(null);
+  const [currentTurn, setCurrentTurn] = useState<{ userId: string; turnNumber: number; startTime: number; beatStartTime: number } | null>(null);
   const [turnProgress, setTurnProgress] = useState<{ verses: number; lines: number } | { timeRemaining: number } | null>(null);
   const [beatIntroOffset, setBeatIntroOffset] = useState<number>(0);
 
@@ -76,7 +76,7 @@ function RoomPageContent() {
   const selectedBeatRef = useRef(selectedBeat);
   const isMobileRef = useRef(isMobile);
   const battleFormatRef = useRef<BattleFormat | null>(null);
-  const currentTurnRef = useRef<{ userId: string; turnNumber: number; startTime: number } | null>(null);
+  const currentTurnRef = useRef<{ userId: string; turnNumber: number; startTime: number; beatStartTime: number } | null>(null);
   const turnProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioAnalyserRef = useRef<AnalyserNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -135,9 +135,11 @@ function RoomPageContent() {
   const startTurn = useCallback((userId: string, turnNumber: number, format: BattleFormat) => {
     if (!isHost) return;
 
+    const audio = beatAudioRef.current || beatAudio;
+    const beatStartTime = audio ? audio.currentTime : beatIntroOffset;
     const startTime = Date.now() + (beatIntroOffset * 1000);
-    setCurrentTurn({ userId, turnNumber, startTime });
-    currentTurnRef.current = { userId, turnNumber, startTime };
+    setCurrentTurn({ userId, turnNumber, startTime, beatStartTime });
+    currentTurnRef.current = { userId, turnNumber, startTime, beatStartTime };
 
     signalingRef.current?.send({
       type: 'turn-started',
@@ -152,9 +154,9 @@ function RoomPageContent() {
     if (format === 'minuto-libre') {
       setTurnProgress({ timeRemaining: config.timePerTurnSeconds || 60 });
     } else {
-      setTurnProgress({ verses: 0, lines: 0 });
+      setTurnProgress({ timeRemaining: config.timePerTurnSeconds || 60 }); // Cambiar a tiempo también
     }
-  }, [isHost, beatIntroOffset]);
+  }, [isHost, beatIntroOffset, beatAudio]);
 
   const endTurn = useCallback((userId: string, turnNumber: number) => {
     if (!isHost) return;
@@ -253,9 +255,22 @@ function RoomPageContent() {
 
   const restartBeat = useCallback(async () => {
     if (!isHost) return;
-    await restartBeatInternal();
-    signalingRef.current?.send({ type: 'beat-restart' });
-  }, [isHost, restartBeatInternal]);
+    (async () => {
+      await restartBeatInternal();
+      // Reiniciar el tiempo del turno si hay un turno activo
+      if (currentTurnRef.current && battleFormatRef.current) {
+        const audio = beatAudioRef.current || beatAudio;
+        const newBeatStartTime = audio ? audio.currentTime : beatIntroOffset;
+        const updatedTurn = {
+          ...currentTurnRef.current,
+          beatStartTime: newBeatStartTime,
+        };
+        setCurrentTurn(updatedTurn);
+        currentTurnRef.current = updatedTurn;
+      }
+      signalingRef.current?.send({ type: 'beat-restart' });
+    })();
+  }, [isHost, restartBeatInternal, beatIntroOffset, beatAudio]);
 
   // ─── WebRTC Hook ───
   const {
@@ -504,7 +519,24 @@ function RoomPageContent() {
             break;
 
           case 'beat-restart':
-            if (!isHostRef.current) restartBeatInternalRef.current?.();
+            if (!isHostRef.current) {
+              (async () => {
+                await restartBeatInternalRef.current?.();
+                // Reiniciar el tiempo del turno si hay un turno activo
+                if (currentTurnRef.current && battleFormatRef.current) {
+                  const audio = beatAudioRef.current;
+                  if (audio) {
+                    const newBeatStartTime = audio.currentTime;
+                    const updatedTurn = {
+                      ...currentTurnRef.current,
+                      beatStartTime: newBeatStartTime,
+                    };
+                    setCurrentTurn(updatedTurn);
+                    currentTurnRef.current = updatedTurn;
+                  }
+                }
+              })();
+            }
             break;
 
           case 'battle-format-selected':
@@ -515,15 +547,19 @@ function RoomPageContent() {
             break;
 
           case 'turn-started':
+            const audio = beatAudioRef.current || beatAudio;
+            const beatStartTime = audio ? audio.currentTime : beatIntroOffset;
             setCurrentTurn({
               userId: message.userId,
               turnNumber: message.turnNumber,
               startTime: message.startTime,
+              beatStartTime,
             });
             currentTurnRef.current = {
               userId: message.userId,
               turnNumber: message.turnNumber,
               startTime: message.startTime,
+              beatStartTime,
             };
             setBattleFormat(message.format);
             battleFormatRef.current = message.format;
@@ -674,50 +710,43 @@ function RoomPageContent() {
 
     const format = battleFormat;
     const config = getBattleFormatConfig(format);
+    const duration = (config.timePerTurnSeconds || 60); // en segundos
 
-    if (format === 'minuto-libre') {
-      // Timer para minuto libre
-      const startTime = currentTurn.startTime;
-      const duration = (config.timePerTurnSeconds || 60) * 1000;
-
-      turnProgressIntervalRef.current = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const remaining = Math.max(0, duration - elapsed);
-        const remainingSeconds = Math.ceil(remaining / 1000);
-
-        setTurnProgress({ timeRemaining: remainingSeconds });
-
-        if (remaining <= 0 && isHost) {
-          nextTurn();
-        }
-      }, 100);
-    } else {
-      // Para 4x4 y 8x8, usar detección de audio (simplificado: usar timer estimado)
-      // En una implementación más avanzada, se podría analizar el audio para detectar pausas
-      const estimatedTimePerLine = 4; // segundos estimados por línea
-      const totalLines = (config.verses || 0) * (config.linesPerVerse || 0);
-      const estimatedDuration = totalLines * estimatedTimePerLine * 1000;
-      const startTime = currentTurn.startTime;
-
-      turnProgressIntervalRef.current = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const progressPercent = Math.min(100, (elapsed / estimatedDuration) * 100);
-        
-        // Estimación simple: asumir distribución uniforme
-        const estimatedLines = Math.floor((progressPercent / 100) * totalLines);
-        const estimatedVerses = Math.floor(estimatedLines / (config.linesPerVerse || 1));
-        const linesInCurrentVerse = estimatedLines % (config.linesPerVerse || 1);
-
-        setTurnProgress({
-          verses: estimatedVerses,
-          lines: linesInCurrentVerse,
-        });
-
-        if (elapsed >= estimatedDuration && isHost) {
-          nextTurn();
-        }
-      }, 500);
+    // Limpiar intervalo anterior si existe
+    if (turnProgressIntervalRef.current) {
+      clearInterval(turnProgressIntervalRef.current);
+      turnProgressIntervalRef.current = null;
     }
+
+    const updateProgress = () => {
+      // Solo actualizar si el beat está reproduciéndose
+      if (!isBeatPlaying) return;
+
+      const audio = beatAudioRef.current || beatAudio;
+      if (!audio) return;
+
+      const currentBeatTime = audio.currentTime;
+      const beatStartTime = currentTurn.beatStartTime;
+      const elapsed = Math.max(0, currentBeatTime - beatStartTime);
+      const remaining = Math.max(0, duration - elapsed);
+      const remainingSeconds = Math.ceil(remaining);
+
+      setTurnProgress({ timeRemaining: remainingSeconds });
+
+      if (remaining <= 0 && isHost) {
+        nextTurn();
+      }
+    };
+
+    // Actualizar inmediatamente
+    updateProgress();
+
+    // Actualizar cada 100ms solo si el beat está reproduciéndose
+    turnProgressIntervalRef.current = setInterval(() => {
+      if (isBeatPlaying) {
+        updateProgress();
+      }
+    }, 100);
 
     return () => {
       if (turnProgressIntervalRef.current) {
@@ -725,7 +754,7 @@ function RoomPageContent() {
         turnProgressIntervalRef.current = null;
       }
     };
-  }, [battleStarted, currentTurn, battleFormat, isHost, nextTurn]);
+  }, [battleStarted, currentTurn, battleFormat, isHost, nextTurn, isBeatPlaying, beatAudio]);
 
   // ─── Beat Change (host only) ───
   const handleBeatChange = useCallback((beatNumber: number) => {
@@ -1037,71 +1066,37 @@ function RoomPageContent() {
             )}
             {turnProgress && battleFormat && (
               <div className={styles.progressInfo}>
-                {'timeRemaining' in turnProgress ? (
-                  <div className={styles.timeProgress}>
-                    <div className={styles.pieChartContainer}>
-                      <svg className={styles.pieChart} viewBox="0 0 100 100">
-                        <circle
-                          className={styles.pieChartBackground}
-                          cx="50"
-                          cy="50"
-                          r="45"
-                        />
-                        <circle
-                          className={styles.pieChartProgress}
-                          cx="50"
-                          cy="50"
-                          r="45"
-                          style={{
-                            strokeDasharray: `${2 * Math.PI * 45}`,
-                            strokeDashoffset: `${2 * Math.PI * 45 * (1 - (turnProgress.timeRemaining / (getBattleFormatConfig(battleFormat).timePerTurnSeconds || 60)))}`,
-                          }}
-                        />
-                        <text
-                          x="50"
-                          y="50"
-                          textAnchor="middle"
-                          dominantBaseline="middle"
-                          className={styles.pieChartText}
-                        >
-                          {turnProgress.timeRemaining}s
-                        </text>
-                      </svg>
-                    </div>
+                <div className={styles.timeProgress}>
+                  <div className={styles.pieChartContainer}>
+                    <svg className={styles.pieChart} viewBox="0 0 100 100">
+                      <circle
+                        className={styles.pieChartBackground}
+                        cx="50"
+                        cy="50"
+                        r="45"
+                      />
+                      <circle
+                        className={styles.pieChartProgress}
+                        cx="50"
+                        cy="50"
+                        r="45"
+                        style={{
+                          strokeDasharray: `${2 * Math.PI * 45}`,
+                          strokeDashoffset: `${2 * Math.PI * 45 * (1 - (turnProgress.timeRemaining / (getBattleFormatConfig(battleFormat).timePerTurnSeconds || 60)))}`,
+                        }}
+                      />
+                      <text
+                        x="50"
+                        y="50"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        className={styles.pieChartText}
+                      >
+                        {turnProgress.timeRemaining}s
+                      </text>
+                    </svg>
                   </div>
-                ) : (
-                  <div className={styles.verseProgress}>
-                    <div className={styles.pieChartContainer}>
-                      <svg className={styles.pieChart} viewBox="0 0 100 100">
-                        <circle
-                          className={styles.pieChartBackground}
-                          cx="50"
-                          cy="50"
-                          r="45"
-                        />
-                        <circle
-                          className={styles.pieChartProgress}
-                          cx="50"
-                          cy="50"
-                          r="45"
-                          style={{
-                            strokeDasharray: `${2 * Math.PI * 45}`,
-                            strokeDashoffset: `${2 * Math.PI * 45 * (1 - (((turnProgress.verses * (getBattleFormatConfig(battleFormat).linesPerVerse || 0)) + turnProgress.lines) / ((getBattleFormatConfig(battleFormat).verses || 0) * (getBattleFormatConfig(battleFormat).linesPerVerse || 0))))}`,
-                          }}
-                        />
-                        <text
-                          x="50"
-                          y="50"
-                          textAnchor="middle"
-                          dominantBaseline="middle"
-                          className={styles.pieChartText}
-                        >
-                          {Math.round((((turnProgress.verses * (getBattleFormatConfig(battleFormat).linesPerVerse || 0)) + turnProgress.lines) / ((getBattleFormatConfig(battleFormat).verses || 0) * (getBattleFormatConfig(battleFormat).linesPerVerse || 0))) * 100)}%
-                        </text>
-                      </svg>
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
             )}
           </div>
