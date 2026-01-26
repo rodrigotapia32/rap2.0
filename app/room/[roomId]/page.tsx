@@ -1113,13 +1113,15 @@ function RoomPageContent() {
         // Verificar si hay ganador en esta ronda
         const roundResult = results[currentRound - 1];
         if (roundResult.winners.length === 1) {
-          // Hay ganador, mostrar ganador pero no cerrar automáticamente
+          // Hay ganador, mantener esta ronda visible (no avanzar más)
           // El usuario cerrará manualmente
-        } else if (currentRound < maxRounds) {
+        } else {
           // Hay empate, mostrar siguiente ronda después de 2 segundos
-          animationTimeout = setTimeout(showNextRound, 2000);
+          if (currentRound < maxRounds) {
+            animationTimeout = setTimeout(showNextRound, 2000);
+          }
+          // Si se acabaron las rondas y hay empate, mantener la última ronda visible
         }
-        // Si se acabaron las rondas, mantener la última ronda visible
       }
     };
     
