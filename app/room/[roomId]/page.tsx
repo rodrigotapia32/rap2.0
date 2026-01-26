@@ -737,26 +737,7 @@ function RoomPageContent() {
             // Iniciar animación de rondas para todos
             setCurrentCachipumRoundDisplay(0);
             setShowCachipumAnimation(true);
-            // Esperar a que los resultados estén disponibles usando el estado actualizado
-            setCachipumResults(currentResults => {
-              if (currentResults.length > 0) {
-                // Iniciar animación con los resultados actuales
-                setTimeout(() => {
-                  startCachipumAnimation(currentResults, message.winnerId);
-                }, 100);
-              } else {
-                // Si aún no hay resultados, esperar un poco más y verificar de nuevo
-                setTimeout(() => {
-                  setCachipumResults(prevResults => {
-                    if (prevResults.length > 0) {
-                      startCachipumAnimation(prevResults, message.winnerId);
-                    }
-                    return prevResults;
-                  });
-                }, 300);
-              }
-              return currentResults;
-            });
+            // El useEffect se encargará de iniciar la animación cuando los resultados estén disponibles
             break;
 
           case 'cachipum-restart':
@@ -1118,8 +1099,11 @@ function RoomPageContent() {
   }, [peers, isHost]);
 
   const startCachipumAnimation = useCallback((results: CachipumRoundResult[], winner: string) => {
+    if (results.length === 0) return;
+    
     let currentRound = 0;
     const maxRounds = results.length;
+    let animationTimeout: NodeJS.Timeout | null = null;
     
     const showNextRound = () => {
       if (currentRound < maxRounds) {
@@ -1133,15 +1117,30 @@ function RoomPageContent() {
           // El usuario cerrará manualmente
         } else if (currentRound < maxRounds) {
           // Hay empate, mostrar siguiente ronda después de 2 segundos
-          setTimeout(showNextRound, 2000);
+          animationTimeout = setTimeout(showNextRound, 2000);
         }
         // Si se acabaron las rondas, mantener la última ronda visible
       }
     };
     
     // Iniciar con la primera ronda después de un pequeño delay
-    setTimeout(showNextRound, 500);
+    animationTimeout = setTimeout(showNextRound, 500);
+    
+    // Retornar función de limpieza
+    return () => {
+      if (animationTimeout) {
+        clearTimeout(animationTimeout);
+      }
+    };
   }, []);
+
+  // ─── Iniciar animación cuando resultados y ganador estén disponibles ───
+  useEffect(() => {
+    if (showCachipumAnimation && cachipumResults.length > 0 && cachipumWinner) {
+      const cleanup = startCachipumAnimation(cachipumResults, cachipumWinner);
+      return cleanup;
+    }
+  }, [showCachipumAnimation, cachipumResults, cachipumWinner, startCachipumAnimation]);
 
   const processCachipumRounds = useCallback(() => {
     if (!isHost) return;
