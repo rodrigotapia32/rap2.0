@@ -731,14 +731,26 @@ function RoomPageContent() {
             const myChoicesCountForWinner = cachipumChoices.get(userIdRef.current)?.length || 0;
             if (myChoicesCountForWinner === 3) {
               setCachipumWinner(message.winnerId);
+              // Iniciar animación de rondas
+              setCurrentCachipumRoundDisplay(0);
               setShowCachipumAnimation(true);
+              // Usar los resultados que ya se recibieron
               setTimeout(() => {
-                setShowCachipumAnimation(false);
-                if (message.winnerId === userIdRef.current) {
-                  setShowCachipumDecision(true);
+                if (cachipumResults.length > 0) {
+                  startCachipumAnimation(cachipumResults, message.winnerId);
                 }
-              }, 5000);
+              }, 100);
             }
+            break;
+
+          case 'cachipum-restart':
+            // Reiniciar cachipum si hay empate en las 3 rondas
+            setCachipumChoices(new Map());
+            setCachipumResults([]);
+            setCachipumRound(1);
+            setCachipumWinner(null);
+            setShowCachipumAnimation(false);
+            setCurrentCachipumRoundDisplay(0);
             break;
 
           case 'cachipum-starter-selected':
