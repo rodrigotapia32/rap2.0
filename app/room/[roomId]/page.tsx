@@ -636,16 +636,14 @@ function RoomPageContent() {
                 const existing = next.get(message.userId) || [];
                 const updated = [...existing, message.choice];
                 next.set(message.userId, updated);
-                return next;
-              });
-              
-              // Si es host, verificar si todos han completado después de actualizar el estado
-              if (isHostRef.current) {
-                setTimeout(() => {
-                  setCachipumChoices(currentChoices => {
+                
+                // Si es host, verificar si todos han completado después de actualizar el estado
+                // Solo procesar si el usuario que envió la opción tiene exactamente 3 opciones
+                if (isHostRef.current && updated.length === 3) {
+                  setTimeout(() => {
                     const allUsers = [userIdRef.current, ...Array.from(peers.keys())];
                     const allComplete = allUsers.every(userId => {
-                      const choices = currentChoices.get(userId);
+                      const choices = next.get(userId);
                       return choices && choices.length === 3;
                     });
                     
@@ -655,7 +653,7 @@ function RoomPageContent() {
                       for (let round = 1; round <= 3; round++) {
                         const roundChoices = new Map<string, CachipumChoice>();
                         allUsers.forEach(userId => {
-                          const choices = currentChoices.get(userId);
+                          const choices = next.get(userId);
                           if (choices && choices[round - 1]) {
                             roundChoices.set(userId, choices[round - 1]);
                           }
@@ -691,11 +689,11 @@ function RoomPageContent() {
                         }, 5000);
                       }
                     }
-                    
-                    return currentChoices;
-                  });
-                }, 200);
-              }
+                  }, 200);
+                }
+                
+                return next;
+              });
             }
             break;
 
