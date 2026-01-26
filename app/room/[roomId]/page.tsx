@@ -1741,7 +1741,7 @@ function RoomPageContent() {
                       );
                     })}
                   </div>
-                  {hasWinner && (
+                  {hasWinner ? (
                     <div className={styles.cachipumRoundWinner}>
                       <h3>🏆 Ganador: {currentResult.winners[0] === userIdRef.current ? nickname : peers.get(currentResult.winners[0])?.nickname || currentResult.winners[0]}</h3>
                       {cachipumWinner && cachipumWinner === userIdRef.current && (
@@ -1766,15 +1766,9 @@ function RoomPageContent() {
                         </button>
                       )}
                     </div>
-                  )}
-                  {!hasWinner && !isFinalRound && (
+                  ) : (
                     <div className={styles.cachipumRoundTie}>
-                      <p>Empate - Siguiente ronda...</p>
-                    </div>
-                  )}
-                  {!hasWinner && isFinalRound && (
-                    <div className={styles.cachipumRoundTie}>
-                      <p>Empate en todas las rondas - Reiniciando...</p>
+                      <p>Empate - {currentCachipumRoundDisplay < cachipumResults.length ? 'Siguiente ronda...' : 'Reiniciando cachipum...'}</p>
                     </div>
                   )}
                   {!hasWinner && currentCachipumRoundDisplay < cachipumResults.length && (
