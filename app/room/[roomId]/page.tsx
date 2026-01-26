@@ -336,6 +336,11 @@ function RoomPageContent() {
     },
   });
 
+  // Mantener peersRef actualizado con el estado de peers
+  useEffect(() => {
+    peersRef.current = peers;
+  }, [peers]);
+
   const replaceLocalStreamRef = useRef(replaceLocalStream);
 
   // Keep webrtc message handler ref in sync
