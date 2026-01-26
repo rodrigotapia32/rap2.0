@@ -700,38 +700,46 @@ function RoomPageContent() {
             break;
 
           case 'cachipum-round-result':
-            const roundChoices = new Map<string, CachipumChoice>();
-            Object.entries(message.choices).forEach(([userId, choice]) => {
-              roundChoices.set(userId, choice);
-            });
-            
-            const roundResult: CachipumRoundResult = {
-              round: message.round,
-              choices: roundChoices,
-              winners: message.winners,
-            };
-            
-            setCachipumResults(prev => {
-              const next = [...prev];
-              const index = next.findIndex(r => r.round === message.round);
-              if (index >= 0) {
-                next[index] = roundResult;
-              } else {
-                next.push(roundResult);
-              }
-              return next.sort((a, b) => a.round - b.round);
-            });
+            // Solo procesar resultados si el usuario ya completó sus 3 opciones
+            const myChoicesCount = cachipumChoices.get(userIdRef.current)?.length || 0;
+            if (myChoicesCount === 3) {
+              const roundChoices = new Map<string, CachipumChoice>();
+              Object.entries(message.choices).forEach(([userId, choice]) => {
+                roundChoices.set(userId, choice);
+              });
+              
+              const roundResult: CachipumRoundResult = {
+                round: message.round,
+                choices: roundChoices,
+                winners: message.winners,
+              };
+              
+              setCachipumResults(prev => {
+                const next = [...prev];
+                const index = next.findIndex(r => r.round === message.round);
+                if (index >= 0) {
+                  next[index] = roundResult;
+                } else {
+                  next.push(roundResult);
+                }
+                return next.sort((a, b) => a.round - b.round);
+              });
+            }
             break;
 
           case 'cachipum-winner':
-            setCachipumWinner(message.winnerId);
-            setShowCachipumAnimation(true);
-            setTimeout(() => {
-              setShowCachipumAnimation(false);
-              if (message.winnerId === userIdRef.current) {
-                setShowCachipumDecision(true);
-              }
-            }, 5000);
+            // Solo mostrar ganador si el usuario ya completó sus 3 opciones
+            const myChoicesCountForWinner = cachipumChoices.get(userIdRef.current)?.length || 0;
+            if (myChoicesCountForWinner === 3) {
+              setCachipumWinner(message.winnerId);
+              setShowCachipumAnimation(true);
+              setTimeout(() => {
+                setShowCachipumAnimation(false);
+                if (message.winnerId === userIdRef.current) {
+                  setShowCachipumDecision(true);
+                }
+              }, 5000);
+            }
             break;
 
           case 'cachipum-starter-selected':
