@@ -1731,6 +1731,37 @@ function RoomPageContent() {
                   {hasWinner && (
                     <div className={styles.cachipumRoundWinner}>
                       <h3>🏆 Ganador: {currentResult.winners[0] === userIdRef.current ? nickname : peers.get(currentResult.winners[0])?.nickname || currentResult.winners[0]}</h3>
+                      {cachipumWinner && cachipumWinner === userIdRef.current && (
+                        <button
+                          onClick={() => {
+                            setShowCachipumAnimation(false);
+                            setShowCachipumDecision(true);
+                          }}
+                          className={styles.cachipumContinueButton}
+                        >
+                          Continuar
+                        </button>
+                      )}
+                      {cachipumWinner && cachipumWinner !== userIdRef.current && (
+                        <button
+                          onClick={() => {
+                            setShowCachipumAnimation(false);
+                          }}
+                          className={styles.cachipumContinueButton}
+                        >
+                          Cerrar
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {!hasWinner && !isFinalRound && (
+                    <div className={styles.cachipumRoundTie}>
+                      <p>Empate - Siguiente ronda...</p>
+                    </div>
+                  )}
+                  {!hasWinner && isFinalRound && (
+                    <div className={styles.cachipumRoundTie}>
+                      <p>Empate en todas las rondas - Reiniciando...</p>
                     </div>
                   )}
                   {!hasWinner && currentCachipumRoundDisplay < cachipumResults.length && (
