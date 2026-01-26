@@ -685,6 +685,71 @@
   min-width: 100px;
 }
 
+/* ─── Cachipum VS Style ─── */
+.cachipumVsContainer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  margin: 2rem 0;
+  flex-wrap: wrap;
+}
+
+.cachipumVsPlayer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem;
+  background: #2a2a2a;
+  border-radius: 12px;
+  border: 2px solid #444;
+  min-width: 150px;
+  transition: all 0.3s ease;
+}
+
+.cachipumVsWinner {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-color: #10b981;
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+}
+
+.cachipumVsPlayerName {
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.cachipumVsChoiceEmoji {
+  font-size: 4rem;
+  line-height: 1;
+}
+
+.cachipumVsChoiceLabel {
+  color: #888;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.cachipumVsSeparator {
+  color: #667eea;
+  font-size: 2rem;
+  font-weight: 700;
+  padding: 0 1rem;
+}
+
+.cachipumRoundTie {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #f59e0b;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
+}
+
 .cachipumPlayerName {
   color: #fff;
   font-size: 0.9rem;

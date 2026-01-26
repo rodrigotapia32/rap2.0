@@ -32,7 +32,8 @@ export type SignalingMessage =
   | { type: 'cachipum-choice'; userId: string; choice: CachipumChoice; round: number }
   | { type: 'cachipum-round-result'; round: number; choices: Record<string, CachipumChoice>; winners: string[]; userId?: string }
   | { type: 'cachipum-winner'; winnerId: string; userId?: string }
-  | { type: 'cachipum-starter-selected'; starterId: string; userId?: string };
+  | { type: 'cachipum-starter-selected'; starterId: string; userId?: string }
+  | { type: 'cachipum-restart'; userId?: string };
 
 export class SignalingClient {
   private ws: WebSocket | null = null;

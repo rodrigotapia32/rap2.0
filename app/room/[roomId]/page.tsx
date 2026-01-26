@@ -62,6 +62,7 @@ function RoomPageContent() {
   const [showCachipum, setShowCachipum] = useState<boolean>(false);
   const [showCachipumDecision, setShowCachipumDecision] = useState<boolean>(false);
   const [showCachipumAnimation, setShowCachipumAnimation] = useState<boolean>(false);
+  const [currentCachipumRoundDisplay, setCurrentCachipumRoundDisplay] = useState<number>(0);
 
   // ─── Refs ───
   const userIdRef = useRef(`user-${Date.now()}-${Math.random()}`);
@@ -1080,6 +1081,44 @@ function RoomPageContent() {
     });
   }, [peers, isHost]);
 
+  const startCachipumAnimation = useCallback((results: CachipumRoundResult[], winner: string) => {
+    let currentRound = 0;
+    const maxRounds = results.length;
+    
+    const showNextRound = () => {
+      if (currentRound < maxRounds) {
+        setCurrentCachipumRoundDisplay(currentRound + 1);
+        currentRound++;
+        
+        // Verificar si hay ganador en esta ronda
+        const roundResult = results[currentRound - 1];
+        if (roundResult.winners.length === 1) {
+          // Hay ganador, terminar animación
+          setTimeout(() => {
+            setShowCachipumAnimation(false);
+            if (winner === userIdRef.current) {
+              setShowCachipumDecision(true);
+            }
+          }, 2000);
+        } else if (currentRound < maxRounds) {
+          // Hay empate, mostrar siguiente ronda
+          setTimeout(showNextRound, 2000);
+        } else {
+          // Se acabaron las rondas, terminar
+          setTimeout(() => {
+            setShowCachipumAnimation(false);
+            if (winner === userIdRef.current) {
+              setShowCachipumDecision(true);
+            }
+          }, 2000);
+        }
+      }
+    };
+    
+    // Iniciar con la primera ronda después de un pequeño delay
+    setTimeout(showNextRound, 500);
+  }, []);
+
   const processCachipumRounds = useCallback(() => {
     if (!isHost) return;
     
@@ -1644,44 +1683,48 @@ function RoomPageContent() {
         </div>
       )}
 
-      {showCachipumAnimation && cachipumResults.length > 0 && (
+      {showCachipumAnimation && cachipumResults.length > 0 && currentCachipumRoundDisplay > 0 && (
         <div className={styles.cachipumAnimation}>
           <div>
-            <h3 className={styles.cachipumTitle}>Resultados del Cachipum</h3>
-            {cachipumResults.map((result) => (
-            <div key={result.round} className={styles.cachipumRoundResult}>
-              <h4>Ronda {result.round}</h4>
-              <div className={styles.cachipumRoundChoices}>
-                {Array.from(result.choices.entries()).map(([userId, choice]) => {
-                  const userNickname = userId === userIdRef.current 
-                    ? nickname 
-                    : peers.get(userId)?.nickname || userId;
-                  return (
-                    <div key={userId} className={styles.cachipumPlayerChoice}>
-                      <span className={styles.cachipumPlayerName}>{userNickname}</span>
-                      <span className={styles.cachipumChoiceEmoji}>{getCachipumEmoji(choice)}</span>
-                      <span className={styles.cachipumChoiceLabel}>{getCachipumLabel(choice)}</span>
+            <h3 className={styles.cachipumTitle}>Ronda {currentCachipumRoundDisplay}</h3>
+            {(() => {
+              const currentResult = cachipumResults[currentCachipumRoundDisplay - 1];
+              if (!currentResult) return null;
+              
+              const allUsers = Array.from(currentResult.choices.entries());
+              const hasWinner = currentResult.winners.length === 1;
+              
+              return (
+                <>
+                  <div className={styles.cachipumVsContainer}>
+                    {allUsers.map(([userId, choice]) => {
+                      const userNickname = userId === userIdRef.current 
+                        ? nickname 
+                        : peers.get(userId)?.nickname || userId;
+                      const isWinner = hasWinner && currentResult.winners[0] === userId;
+                      return (
+                        <div key={userId} className={`${styles.cachipumVsPlayer} ${isWinner ? styles.cachipumVsWinner : ''}`}>
+                          <div className={styles.cachipumVsPlayerName}>{userNickname}</div>
+                          <div className={styles.cachipumVsChoiceEmoji}>{getCachipumEmoji(choice)}</div>
+                          <div className={styles.cachipumVsChoiceLabel}>{getCachipumLabel(choice)}</div>
+                        </div>
+                      );
+                    })}
+                    <div className={styles.cachipumVsSeparator}>VS</div>
+                  </div>
+                  {hasWinner && (
+                    <div className={styles.cachipumRoundWinner}>
+                      <h3>🏆 Ganador: {currentResult.winners[0] === userIdRef.current ? nickname : peers.get(currentResult.winners[0])?.nickname || currentResult.winners[0]}</h3>
                     </div>
-                  );
-                })}
-              </div>
-              {result.winners.length > 0 && (
-                <div className={styles.cachipumRoundWinner}>
-                  {result.winners.length === 1 ? (
-                    <p>Ganador: {result.winners[0] === userIdRef.current ? nickname : peers.get(result.winners[0])?.nickname || result.winners[0]}</p>
-                  ) : (
-                    <p>Empate entre: {result.winners.map(w => w === userIdRef.current ? nickname : peers.get(w)?.nickname || w).join(', ')}</p>
                   )}
-                </div>
-              )}
-            </div>
-          ))}
-            {cachipumWinner && (
-              <div className={styles.cachipumFinalWinner}>
-                <h3>🏆 Ganador del Cachipum</h3>
-                <p>{cachipumWinner === userIdRef.current ? nickname : peers.get(cachipumWinner)?.nickname || cachipumWinner}</p>
-              </div>
-            )}
+                  {!hasWinner && currentCachipumRoundDisplay < cachipumResults.length && (
+                    <div className={styles.cachipumRoundTie}>
+                      <p>Empate - Siguiente ronda...</p>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
