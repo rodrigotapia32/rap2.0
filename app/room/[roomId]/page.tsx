@@ -1635,8 +1635,9 @@ function RoomPageContent() {
 
       {showCachipumAnimation && cachipumResults.length > 0 && (
         <div className={styles.cachipumAnimation}>
-          <h3 className={styles.cachipumTitle}>Resultados del Cachipum</h3>
-          {cachipumResults.map((result) => (
+          <div>
+            <h3 className={styles.cachipumTitle}>Resultados del Cachipum</h3>
+            {cachipumResults.map((result) => (
             <div key={result.round} className={styles.cachipumRoundResult}>
               <h4>Ronda {result.round}</h4>
               <div className={styles.cachipumRoundChoices}>
@@ -1664,20 +1665,22 @@ function RoomPageContent() {
               )}
             </div>
           ))}
-          {cachipumWinner && (
-            <div className={styles.cachipumFinalWinner}>
-              <h3>🏆 Ganador del Cachipum</h3>
-              <p>{cachipumWinner === userIdRef.current ? nickname : peers.get(cachipumWinner)?.nickname || cachipumWinner}</p>
-            </div>
-          )}
+            {cachipumWinner && (
+              <div className={styles.cachipumFinalWinner}>
+                <h3>🏆 Ganador del Cachipum</h3>
+                <p>{cachipumWinner === userIdRef.current ? nickname : peers.get(cachipumWinner)?.nickname || cachipumWinner}</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {showCachipumDecision && cachipumWinner === userIdRef.current && (
         <div className={styles.cachipumDecision}>
-          <h3 className={styles.cachipumTitle}>¡Ganaste el Cachipum!</h3>
-          <p className={styles.cachipumSubtitle}>¿Quién parte primero?</p>
-          <div className={styles.cachipumDecisionButtons}>
+          <div>
+            <h3 className={styles.cachipumTitle}>¡Ganaste el Cachipum!</h3>
+            <p className={styles.cachipumSubtitle}>¿Quién parte primero?</p>
+            <div className={styles.cachipumDecisionButtons}>
             <button
               onClick={() => handleCachipumStarterSelection(userIdRef.current)}
               className={styles.cachipumDecisionButton}
