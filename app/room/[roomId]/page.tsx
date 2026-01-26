@@ -1630,6 +1630,7 @@ function RoomPageContent() {
               </>
             );
           })()}
+          </div>
         </div>
       )}
 
