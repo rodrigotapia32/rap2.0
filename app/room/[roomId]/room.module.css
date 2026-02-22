@@ -1,23 +1,72 @@
 .container {
   min-height: 100vh;
   padding: 2rem;
+  padding-bottom: 4rem; /* Espacio para el footer fijo */
   max-width: 800px;
   margin: 0 auto;
 }
 
 .header {
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  min-height: 48px;
 }
 
 .title {
   font-size: 2rem;
   font-weight: 700;
-  margin-bottom: 1.5rem;
-  text-align: center;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* Botones del header: mismo formato (opciones + salir) */
+.headerIconButton {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  padding: 0;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: #fff;
+  background: #2a2a2a;
+  border: 2px solid #444;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.headerIconButton:hover {
+  background: #333;
+  border-color: #667eea;
+  transform: scale(1.1);
+}
+
+.headerIconButton:active {
+  transform: scale(0.95);
 }
 
 .players {
@@ -27,6 +76,8 @@
 }
 
 .player {
+  position: relative;
+  overflow: hidden;
   padding: 1rem;
   background: #1a1a1a;
   border-radius: 8px;
@@ -34,6 +85,33 @@
   display: flex;
   align-items: center;
   gap: 1rem;
+  transition: all 0.3s;
+}
+
+.micLevelBar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(102, 126, 234, 0.4);
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 0;
+  transition: width 0.05s ease-out;
+}
+
+.playerContent {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+}
+
+.playerReady {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: #10b981;
 }
 
 .playerLabel {
@@ -108,12 +186,16 @@
 }
 
 .status {
-  margin-bottom: 2rem;
+  margin-bottom: 0.5rem;
   text-align: center;
-  min-height: 60px;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.status:empty {
+  display: none;
 }
 
 .statusText {
@@ -121,11 +203,41 @@
   font-size: 1.1rem;
 }
 
+/* ─── Status Footer ─── */
+.statusFooter {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(26, 26, 26, 0.95);
+  border-top: 1px solid #333;
+  padding: 0.5rem 1rem;
+  text-align: center;
+  z-index: 50;
+  backdrop-filter: blur(10px);
+  max-width: 800px;
+  margin: 0 auto;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.statusFooterText {
+  color: #888;
+  font-size: 0.75rem;
+  margin: 0;
+  line-height: 1.4;
+}
+
 .countdown {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   font-size: 6rem;
   font-weight: 700;
   color: #667eea;
   animation: pulse 0.5s ease-in-out;
+  z-index: 200;
+  pointer-events: none;
 }
 
 @keyframes pulse {
@@ -138,21 +250,64 @@
 }
 
 .battleActive {
-  padding: 1rem;
+  width: 100%;
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.screenFrame {
+  position: relative;
+  padding: 1.5rem;
+  background: #0a0a0a;
+  border: 4px solid #333;
+  border-radius: 12px;
+  box-shadow: 
+    0 0 20px rgba(0, 0, 0, 0.8),
+    inset 0 0 20px rgba(0, 0, 0, 0.5);
+  min-height: 300px;
+  height: 300px;
+  max-height: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  gap: 1rem;
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.beatVolumeControl {
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 1rem 1.5rem;
+  background: #1a1a1a;
+  border: 2px solid #333;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 .battleText {
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 700;
   background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: pulse 1s ease-in-out infinite;
+  margin: 0;
+  text-align: center;
 }
 
 .readyButton {
   width: 100%;
+  max-width: 500px;
   padding: 1.5rem;
   font-size: 1.2rem;
   font-weight: 600;
@@ -161,16 +316,50 @@
   border-radius: 8px;
   color: #fff;
   cursor: pointer;
-  transition: opacity 0.2s;
-  margin-bottom: 2rem;
+  transition: all 0.3s;
+  margin-bottom: 0;
 }
 
-.readyButton:hover {
+.readyButton:hover:not(:disabled) {
   opacity: 0.9;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
-.readyButton:active {
+.readyButton:active:not(:disabled) {
   opacity: 0.8;
+  transform: translateY(0);
+}
+
+.readyButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: linear-gradient(135deg, #444 0%, #555 100%);
+}
+
+.notReadyButton {
+  background: linear-gradient(135deg, #f5576c 0%, #f093fb 100%);
+}
+
+.notReadyButton:hover {
+  opacity: 0.9;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
+}
+
+.readyButtonAnimated {
+  animation: readyButtonPulse 2s ease-in-out infinite;
+}
+
+@keyframes readyButtonPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.7);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(102, 126, 234, 0);
+    transform: scale(1.02);
+  }
 }
 
 .beatSelector {
@@ -187,6 +376,9 @@
   background: #1a1a1a;
   border-radius: 8px;
   border: 2px solid #333;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .label {
@@ -199,20 +391,33 @@
 .beatButtons {
   display: flex;
   gap: 0.75rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  margin-bottom: 1rem;
+  justify-content: center;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.battleResetContainer {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #333;
+  display: flex;
+  justify-content: center;
 }
 
 .beatItem {
   flex: 1;
-  min-width: 150px;
+  min-width: 200px;
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .beatButton {
-  width: 100%;
-  padding: 1rem;
+  flex: 1 1 0;
+  padding: 0.75rem 1rem;
   background: #2a2a2a;
   border: 2px solid #444;
   border-radius: 8px;
@@ -221,6 +426,12 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .beatButton:hover {
@@ -233,20 +444,32 @@
   border-color: #667eea;
 }
 
+.resetBattleButton {
+  background: linear-gradient(135deg, #f5576c 0%, #f093fb 100%);
+  border-color: #f5576c;
+}
+
+.resetBattleButton:hover {
+  background: linear-gradient(135deg, #e0485c 0%, #e083a8 100%);
+  border-color: #e0485c;
+}
+
 .beatOffsetControl {
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .beatOffsetLabel {
   color: #888;
-  font-size: 0.75rem;
-  text-align: center;
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
 
 .beatOffsetInput {
-  width: 100%;
+  width: 60px;
   padding: 0.5rem;
   background: #2a2a2a;
   border: 1px solid #444;
@@ -257,23 +480,36 @@
   outline: none;
 }
 
+.beatOffsetUnit {
+  color: #888;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
 .beatOffsetInput:focus {
   border-color: #667eea;
 }
 
 .beatInfo {
-  padding: 1rem;
+  padding: 0.75rem 1rem;
   background: #2a2a2a;
   border: 2px solid #444;
   border-radius: 8px;
-  text-align: center;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.beatLabel {
+  color: #888;
+  font-size: 0.9rem;
 }
 
 .beatDisplay {
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-size: 1rem;
+  font-weight: 600;
   color: #667eea;
-  display: block;
 }
 
 .controls {
@@ -339,8 +575,8 @@
 
 /* ─── Format Selector ─── */
 .formatSelector {
-  margin-bottom: 2rem;
-  padding: 1.5rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
   background: #1a1a1a;
   border-radius: 8px;
   border: 2px solid #333;
@@ -348,14 +584,14 @@
 
 .formatButtons {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
   flex-wrap: wrap;
 }
 
 .formatButton {
   flex: 1;
-  min-width: 150px;
-  padding: 1.5rem 1rem;
+  min-width: 120px;
+  padding: 0.75rem 0.5rem;
   background: #2a2a2a;
   border: 2px solid #444;
   border-radius: 8px;
@@ -365,7 +601,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.25rem;
 }
 
 .formatButton:hover {
@@ -374,14 +610,19 @@
   transform: translateY(-2px);
 }
 
+.formatButtonActive {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+}
+
 .formatButtonTitle {
-  font-size: 1.5rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: #667eea;
 }
 
 .formatButtonDesc {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   color: #888;
   text-align: center;
 }
@@ -407,10 +648,758 @@
   font-weight: 600;
 }
 
-/* ─── Turn Info ─── */
-.turnInfo {
+/* ─── Config Display ─── */
+.configDisplay {
   margin-top: 1.5rem;
   padding: 1rem;
+  background: #2a2a2a;
+  border-radius: 8px;
+  border: 2px solid #444;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.configItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.configLabel {
+  color: #888;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.configValue {
+  color: #667eea;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+/* ─── Screen Config Buttons (dentro de la pantalla) ─── */
+.screenConfigButtons {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.screenConfigButton {
+  padding: 0.75rem 1.5rem;
+  background: #2a2a2a;
+  border: 2px solid #444;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.screenConfigButton:hover {
+  background: #333;
+  border-color: #667eea;
+  transform: translateY(-2px);
+}
+
+/* ─── Modal Styles ─── */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 2rem;
+}
+
+.modalContent {
+  background: #1a1a1a;
+  border: 2px solid #444;
+  border-radius: 12px;
+  padding: 0;
+  max-width: 95vw;
+  width: 100%;
+  max-width: 600px;
+  max-height: 95vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem;
+  border-bottom: 1px solid #333;
+}
+
+.modalTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.modalCloseButton {
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.modalCloseButton:hover {
+  background: #2a2a2a;
+  color: #fff;
+}
+
+.modalBody {
+  padding: 1rem;
+  padding-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow-y: visible;
+}
+
+/* ─── Selector de Entradas ─── */
+.entriesSelector {
+  margin-top: 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid #333;
+}
+
+.entriesLabel {
+  display: block;
+  color: #888;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.entriesButtons {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: nowrap;
+}
+
+.entriesButton {
+  flex: 1;
+  min-width: 60px;
+  max-width: 70px;
+  padding: 0.5rem;
+  background: #2a2a2a;
+  border: 2px solid #444;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.entriesButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.entriesButton:hover {
+  background: #333;
+  border-color: #667eea;
+  transform: translateY(-2px);
+}
+
+.entriesButtonActive {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+  color: #fff;
+}
+
+/* ─── Custom Seconds Selector ─── */
+.customSecondsSelector {
+  margin-top: 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid #333;
+}
+
+.customSecondsInputGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 0.75rem;
+}
+
+.customSecondsInput {
+  width: 100px;
+  padding: 0.6rem 0.75rem;
+  background: #2a2a2a;
+  border: 2px solid #444;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.customSecondsInput:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.customSecondsInput:focus {
+  outline: none;
+  border-color: #667eea;
+  background: #333;
+}
+
+.customSecondsUnit {
+  color: #888;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.customSecondsHint {
+  margin-top: 0.25rem;
+  color: #888;
+  font-size: 0.65rem;
+  text-align: center;
+  font-style: italic;
+}
+
+/* ─── Format Modal Actions ─── */
+.formatModalActions {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #333;
+  display: flex;
+  justify-content: center;
+}
+
+.formatAcceptButton {
+  padding: 0.6rem 2rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: 2px solid #667eea;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 150px;
+}
+
+.formatAcceptButton:hover {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+
+.beatTabs {
+  margin-left: -1.5rem;
+  margin-right: -1.5rem;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+/* ─── Screen Selectors (dentro de modales) ─── */
+.screenLabel {
+  color: #888;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+
+.screenBeatButtons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.screenBeatItem {
+  flex: 1;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.screenBeatButton {
+  width: 100%;
+  padding: 0.5rem;
+  background: #2a2a2a;
+  border: 2px solid #444;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.screenBeatButton:hover {
+  background: #333;
+  border-color: #667eea;
+}
+
+.screenBeatButtonActive {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+}
+
+.screenBeatOffsetControl {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+  justify-content: center;
+}
+
+.screenBeatOffsetLabel {
+  color: #888;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.screenBeatOffsetInput {
+  width: 50px;
+  padding: 0.25rem;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.7rem;
+  text-align: center;
+  outline: none;
+}
+
+.screenBeatOffsetInput:focus {
+  border-color: #667eea;
+}
+
+.screenBeatOffsetUnit {
+  color: #888;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.screenFormatSelector {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(42, 42, 42, 0.5);
+  border-radius: 8px;
+  border: 1px solid #444;
+}
+
+.screenFormatButtons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.screenFormatRow {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.screenFormatButton {
+  flex: 1;
+  min-width: 100px;
+  padding: 0.6rem 0.5rem;
+  background: #2a2a2a;
+  border: 2px solid #444;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.screenFormatButtonFull {
+  width: 100%;
+  min-width: 100%;
+}
+
+.screenFormatButton:hover {
+  background: #333;
+  border-color: #667eea;
+  transform: translateY(-2px);
+}
+
+.screenFormatButtonActive {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+}
+
+.screenFormatButtonTitle {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #667eea;
+}
+
+.screenFormatButtonActive .screenFormatButtonTitle {
+  color: #fff;
+}
+
+.screenFormatButtonDesc {
+  font-size: 0.7rem;
+  color: #888;
+  text-align: center;
+}
+
+.screenFormatButtonActive .screenFormatButtonDesc {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* ─── Beat Preview Modal Styles ─── */
+.beatTabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 2px solid #333;
+  margin-bottom: 1.5rem;
+  padding: 0;
+  align-items: flex-end;
+}
+
+.beatTab {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  background: #2a2a2a;
+  border: 2px solid #444;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  color: #888;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  position: relative;
+  min-height: 44px;
+  box-sizing: border-box;
+  margin: 0;
+}
+
+.beatTab:hover {
+  background: #333;
+  color: #fff;
+}
+
+.beatTabActive {
+  background: #1a1a1a;
+  border-color: #667eea;
+  color: #667eea;
+  border-bottom: 2px solid #1a1a1a;
+  margin-bottom: -2px;
+  z-index: 1;
+}
+
+.beatTabSelected {
+  background: #0d2818;
+  border-color: #10b981;
+  color: #10b981;
+}
+
+.beatTabSelected.beatTabActive {
+  background: #1a1a1a;
+  border-color: #10b981;
+  color: #10b981;
+  border-bottom: 2px solid #1a1a1a;
+  z-index: 2;
+}
+
+.beatTabContent {
+  min-height: 350px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.beatTabContent::-webkit-scrollbar {
+  width: 6px;
+}
+
+.beatTabContent::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 3px;
+}
+
+.beatTabContent::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 3px;
+}
+
+.beatTabContent::-webkit-scrollbar-thumb:hover {
+  background: #667eea;
+}
+
+.beatPreviewCard {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.beatPreviewHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.beatPreviewTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.beatSelectedBadge {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+}
+
+.beatPreviewControls {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.beatPreviewButton {
+  flex: 1;
+  min-width: 120px;
+  padding: 0.75rem 1rem;
+  background: #1a1a1a;
+  border: 2px solid #444;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.beatPreviewButton:hover {
+  background: #333;
+  border-color: #10b981;
+}
+
+.beatPreviewButtonPlaying {
+  background: #10b981;
+  border-color: #10b981;
+  color: #fff;
+}
+
+.beatPreviewButtonPlaying:hover {
+  background: #0ea271;
+  border-color: #0ea271;
+}
+
+.beatPreviewButtonPaused {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: #fff;
+}
+
+.beatPreviewButtonPaused:hover {
+  background: #d97706;
+  border-color: #d97706;
+}
+
+.beatPreviewRestartButton {
+  flex: 1;
+  min-width: 120px;
+  padding: 0.75rem 1rem;
+  background: #1a1a1a;
+  border: 2px solid #444;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.beatPreviewRestartButton:hover {
+  background: #333;
+  border-color: #667eea;
+}
+
+.beatPreviewTime {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: #1a1a1a;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.beatPreviewTimeLabel {
+  color: #888;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.beatPreviewTimeValue {
+  color: #667eea;
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+}
+
+.beatSelectButton {
+  flex: 1;
+  min-width: 120px;
+  padding: 0.75rem 1rem;
+  background: #1a1a1a;
+  border: 2px solid #444;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.beatSelectButton:hover {
+  background: #333;
+  border-color: #667eea;
+}
+
+.beatSelectButtonActive {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #667eea;
+  color: #fff;
+}
+
+.beatPreviewOffset {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.beatPreviewOffsetLabel {
+  color: #888;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.beatPreviewOffsetInputGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.beatPreviewOffsetInput {
+  flex: 1;
+  padding: 0.75rem;
+  background: #1a1a1a;
+  border: 2px solid #444;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1rem;
+  text-align: center;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.beatPreviewOffsetInput:focus {
+  border-color: #667eea;
+  background: #222;
+}
+
+.beatPreviewOffsetUnit {
+  color: #888;
+  font-size: 0.9rem;
+  font-weight: 600;
+  min-width: 20px;
+}
+
+.beatPreviewOffsetHint {
+  color: #666;
+  font-size: 0.75rem;
+  margin: 0;
+  font-style: italic;
+}
+
+.beatSelectContainer {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #333;
+  display: flex;
+  justify-content: center;
+}
+
+.beatSelectContainer .beatSelectButton {
+  width: 100%;
+  max-width: 300px;
+  padding: 1rem 2rem;
+  font-size: 1rem;
+}
+
+/* ─── Turn Info ─── */
+.turnInfo {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
   background: #2a2a2a;
   border-radius: 8px;
   border: 2px solid #667eea;
@@ -438,11 +1427,15 @@
 
 /* ─── Progress Info ─── */
 .progressInfo {
-  margin-top: 1rem;
-  padding: 1rem;
+  margin-top: 0.5rem;
+  padding: 0.75rem;
   background: #2a2a2a;
   border-radius: 8px;
   border: 2px solid #10b981;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .timeProgress,
@@ -454,8 +1447,8 @@
 }
 
 .pieChartContainer {
-  width: 150px;
-  height: 150px;
+  width: 120px;
+  height: 120px;
   margin: 0 auto;
 }
 
@@ -481,7 +1474,7 @@
 
 .pieChartText {
   fill: #10b981;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   transform: rotate(90deg);
   transform-origin: 50px 50px;
@@ -525,73 +1518,106 @@
   background: #1a1a1a;
   border: 2px solid #444;
   border-radius: 12px;
-  padding: 2rem;
-  max-width: 600px;
+  padding: 1rem 1.5rem;
+  max-width: 500px;
   width: 100%;
   text-align: center;
-  max-height: 90vh;
-  overflow-y: auto;
+  max-height: auto;
+  overflow-y: visible;
 }
 
 .cachipumTitle {
-  font-size: 1.5rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: #fff;
-  margin-bottom: 0.5rem;
+  margin: 0 0 0.5rem 0;
+  text-align: center;
+  width: 100%;
 }
 
 .cachipumSubtitle {
-  font-size: 1rem;
+  font-size: 0.85rem;
   color: #888;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.75rem;
 }
 
 .cachipumProgress {
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.75rem;
+  min-height: 2.5rem;
 }
 
 .cachipumProgress p {
   color: #fff;
-  font-size: 1rem;
-  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
 }
 
 .cachipumMyChoices {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  flex-direction: row;
+  gap: 0.75rem;
   justify-content: center;
-  margin-top: 0.5rem;
+  align-items: center;
+  margin-top: 0.75rem;
+  min-height: 3rem;
+  height: 3rem;
 }
 
 .cachipumChoiceBadge {
-  padding: 0.5rem 1rem;
-  background: #2a2a2a;
-  border: 1px solid #444;
-  border-radius: 6px;
-  color: #fff;
-  font-size: 0.9rem;
+  font-size: 2rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+}
+
+.cachipumEmptySlot {
+  font-size: 2rem;
+  color: #444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
 }
 
 .cachipumButtons {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
   justify-content: center;
-  flex-wrap: wrap;
-  margin: 1.5rem 0;
+  flex-wrap: nowrap;
+  margin: 0.75rem 0;
 }
 
 .cachipumButton {
-  padding: 1.5rem 2rem;
+  flex: 1;
+  padding: 1rem 0.75rem;
   background: #2a2a2a;
   border: 2px solid #444;
   border-radius: 8px;
   color: #fff;
-  font-size: 1.2rem;
-  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.cachipumEmoji {
+  font-size: 3rem;
+  line-height: 1;
+  display: block;
+}
+
+.cachipumLabel {
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: block;
 }
 
 .cachipumButton:hover:not(:disabled) {
@@ -612,27 +1638,28 @@
   margin-top: 1rem;
 }
 
-/* ─── Cachipum Animation ─── */
+/* ─── Cachipum Animation (una sola ventana, sin fondo oscuro) ─── */
 .cachipumAnimation {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.85);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   padding: 2rem;
+  pointer-events: none;
 }
 
 .cachipumAnimation > div {
   background: #1a1a1a;
   border: 2px solid #667eea;
   border-radius: 12px;
-  padding: 2rem;
-  max-width: 600px;
+  padding: 1.5rem;
+  max-width: 90vw;
   width: 100%;
   text-align: center;
   max-height: 90vh;
@@ -640,7 +1667,135 @@
   animation: fadeIn 0.5s ease-in;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 1.5rem;
+  box-sizing: border-box;
+}
+
+.cachipumRoundContent {
+  animation: roundFadeIn 0.4s ease-in;
+  width: 100%;
+}
+
+.cachipumRoundResults {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  width: 100%;
+  margin-top: 1rem;
+}
+
+.cachipumRoundVS {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #667eea;
+  padding: 0 0.5rem;
+}
+
+.cachipumRoundResult {
+  flex: 1;
+  max-width: 200px;
+  padding: 1rem;
+  border: 2px solid #444;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+/* Ganador: cuadrado completo verde - mayor especificidad para que no lo pise la base */
+.cachipumRoundResult.cachipumRoundResultWinner {
+  background: linear-gradient(135deg, #065f46 0%, #047857 50%, #059669 100%) !important;
+  border-color: #34d399;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+}
+
+.cachipumRoundResult.cachipumRoundResultWinner .cachipumRoundResultName,
+.cachipumRoundResult.cachipumRoundResultWinner .cachipumRoundResultLabel {
+  color: #fff;
+}
+
+/* Perdedor: cuadrado completo rojo */
+.cachipumRoundResult.cachipumRoundResultLoser {
+  background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 50%, #b91c1c 100%) !important;
+  border-color: #f87171;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+}
+
+.cachipumRoundResult.cachipumRoundResultLoser .cachipumRoundResultName,
+.cachipumRoundResult.cachipumRoundResultLoser .cachipumRoundResultLabel {
+  color: #fff;
+}
+
+/* Base: solo para empate o sin clase de resultado */
+.cachipumRoundResult:not(.cachipumRoundResultWinner):not(.cachipumRoundResultLoser) {
+  background: #2a2a2a;
+}
+
+.cachipumRoundResultTie {
+  border-color: #555;
+}
+
+.cachipumRoundResultName {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.cachipumRoundResultChoice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.cachipumRoundResultEmoji {
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.cachipumRoundResultLabel {
+  font-size: 0.85rem;
+  color: #888;
+  font-weight: 500;
+}
+
+.cachipumRoundResultStatus {
+  margin-top: 0.25rem;
+}
+
+.cachipumRoundResultStatusText {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.cachipumRoundResultWinner .cachipumRoundResultStatusText {
+  color: #fff;
+  font-weight: 700;
+}
+
+.cachipumRoundResultLoser .cachipumRoundResultStatusText {
+  color: #fff;
+  font-weight: 700;
+}
+
+.cachipumRoundResultTie .cachipumRoundResultStatusText {
+  color: #9ca3af;
+}
+
+@keyframes roundFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 @keyframes fadeIn {
@@ -714,24 +1869,32 @@
 /* ─── Cachipum VS Style ─── */
 .cachipumVsContainer {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  gap: 2rem;
-  margin: 2rem 0;
+  gap: 1rem;
+  margin: 1rem 0;
   flex-wrap: nowrap;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .cachipumVsPlayer {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
-  padding: 2rem;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1.5rem 1rem;
   background: #2a2a2a;
   border-radius: 12px;
   border: 2px solid #444;
-  min-width: 150px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: calc(50% - 1rem);
   transition: all 0.3s ease;
+  box-sizing: border-box;
+  min-height: 200px;
 }
 
 .cachipumVsPlayerMissing {
@@ -748,13 +1911,16 @@
 
 .cachipumVsPlayerName {
   color: #fff;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   font-weight: 700;
   text-align: center;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
 }
 
 .cachipumVsChoiceEmoji {
-  font-size: 4rem;
+  font-size: 3rem;
   line-height: 1;
 }
 
@@ -768,17 +1934,26 @@
   color: #667eea;
   font-size: 2rem;
   font-weight: 700;
-  padding: 0 1rem;
+  padding: 0;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 100%;
+  min-height: 200px;
 }
 
 .cachipumRoundTie {
-  margin-top: 1.5rem;
-  padding: 1rem;
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
   background: #f59e0b;
-  border-radius: 8px;
+  border-radius: 6px;
   color: #fff;
   font-weight: 600;
   text-align: center;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .cachipumContinueButton {
@@ -816,11 +1991,14 @@
 
 .cachipumRoundWinner {
   margin-top: 1rem;
-  padding: 0.75rem;
+  padding: 0.75rem 1rem;
   background: #10b981;
   border-radius: 6px;
   color: #fff;
   font-weight: 600;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .cachipumFinalWinner {
@@ -915,4 +2093,182 @@
   border-radius: 8px;
   margin: 1rem 0;
   text-align: center;
+}
+
+/* ─── Settings Sidebar ─── */
+.settingsToggleButton {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  background: #2a2a2a;
+  border: 2px solid #444;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.settingsToggleButton:hover {
+  background: #333;
+  border-color: #667eea;
+  transform: scale(1.1);
+}
+
+.settingsToggleButton:active {
+  transform: scale(0.95);
+}
+
+.settingsOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 998;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.settingsSidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 100%;
+  max-width: 400px;
+  height: 100vh;
+  background: #1a1a1a;
+  border-left: 2px solid #333;
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5);
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.settingsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem;
+  border-bottom: 2px solid #333;
+  background: #0a0a0a;
+}
+
+.settingsTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.settingsCloseButton {
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: 2px solid #444;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 1.25rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.settingsCloseButton:hover {
+  background: #2a2a2a;
+  border-color: #667eea;
+  transform: scale(1.1);
+}
+
+.settingsCloseButton:active {
+  transform: scale(0.95);
+}
+
+.settingsContent {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.settingsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: #2a2a2a;
+  border: 2px solid #333;
+  border-radius: 8px;
+}
+
+.cachipumStartButton {
+  width: 100%;
+  padding: 1rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cachipumStartButton:hover {
+  opacity: 0.9;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.cachipumStartButton:active {
+  transform: translateY(0);
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 768px) {
+  .settingsSidebar {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .headerRow {
+    gap: 0.5rem;
+  }
+
+  .title {
+    font-size: 1.5rem;
+  }
+
+  .headerIconButton {
+    width: 44px;
+    height: 44px;
+    font-size: 1.25rem;
+  }
 }

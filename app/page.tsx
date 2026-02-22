@@ -9,8 +9,22 @@ function HomeContent() {
   const searchParams = useSearchParams();
   const [nickname, setNickname] = useState('');
   const [roomId, setRoomId] = useState('');
+  const [roomIdFromUrl, setRoomIdFromUrl] = useState(false);
+  const [showJoinForm, setShowJoinForm] = useState(false);
   
-  // Verificar si hay un roomId en la URL (link compartido)
+  // Cargar nickname y roomId desde localStorage al montar
+  useEffect(() => {
+    const savedNickname = localStorage.getItem('rap2.0_nickname');
+    if (savedNickname) setNickname(savedNickname);
+    
+    const urlRoomId = searchParams.get('roomId');
+    if (!urlRoomId) {
+      const savedRoomId = localStorage.getItem('rap2.0_lastRoomId');
+      if (savedRoomId && /^[A-Z0-9]{6}$/.test(savedRoomId)) setRoomId(savedRoomId);
+    }
+  }, [searchParams]);
+  
+  // Verificar si hay un roomId en la URL (link compartido) - tiene prioridad sobre localStorage
   useEffect(() => {
     const urlRoomId = searchParams.get('roomId');
     if (urlRoomId) {
@@ -18,9 +32,16 @@ function HomeContent() {
       // Validar que sea un código válido
       if (/^[A-Z0-9]{6}$/.test(trimmedRoomId)) {
         setRoomId(trimmedRoomId);
+        setRoomIdFromUrl(true);
       }
+    } else {
+      setRoomIdFromUrl(false);
     }
   }, [searchParams]);
+  
+  useEffect(() => {
+    if (nickname.trim()) localStorage.setItem('rap2.0_nickname', nickname.trim());
+  }, [nickname]);
 
   const handleCreateRoom = () => {
     if (!nickname.trim()) {
@@ -29,9 +50,10 @@ function HomeContent() {
     }
     // Generar código de sala único
     const newRoomId = generateRoomId();
+    localStorage.setItem('rap2.0_lastRoomId', newRoomId);
     router.push(`/create?nickname=${encodeURIComponent(nickname)}&roomId=${newRoomId}`);
   };
-
+  
   const handleJoinRoom = () => {
     if (!nickname.trim()) {
       alert('Ingresa un nickname');
@@ -46,7 +68,7 @@ function HomeContent() {
       alert('El código de sala debe ser de 6 caracteres alfanuméricos (ej: ABC123)');
       return;
     }
-    // Si hay un código en la URL, entrar automáticamente
+    localStorage.setItem('rap2.0_lastRoomId', trimmedRoomId);
     router.push(`/room/${trimmedRoomId}?nickname=${encodeURIComponent(nickname)}&isHost=false`);
   };
   
@@ -72,7 +94,7 @@ function HomeContent() {
   };
 
   // Si hay un roomId en la URL (link compartido), mostrar solo el input de nickname
-  const hasRoomIdFromUrl = roomId && /^[A-Z0-9]{6}$/.test(roomId);
+  const hasRoomIdFromUrl = roomIdFromUrl && roomId && /^[A-Z0-9]{6}$/.test(roomId);
 
   return (
     <div className={styles.container}>
@@ -113,7 +135,7 @@ function HomeContent() {
             </button>
           </>
         ) : (
-          // Vista normal cuando no hay código en la URL
+          // Vista normal: nickname + dos acciones (Crear sala / Unirse a sala)
           <>
             <input
               type="text"
@@ -123,45 +145,68 @@ function HomeContent() {
               className={styles.input}
               maxLength={20}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && nickname.trim()) {
+                if (e.key === 'Enter' && nickname.trim() && !showJoinForm) {
                   handleCreateRoom();
                 }
               }}
             />
 
-            <div className={styles.joinSection}>
-              <input
-                type="text"
-                placeholder="Código de sala (ej: ABC123)"
-                value={roomId}
-                onChange={(e) => {
-                  const value = e.target.value.toUpperCase();
-                  // Permitir solo caracteres alfanuméricos
-                  if (/^[A-Z0-9]*$/.test(value) || value === '') {
-                    setRoomId(value);
-                  }
-                }}
-                className={styles.input}
-                maxLength={6}
-                style={{ textAlign: 'center', letterSpacing: '0.2em', fontSize: '1.2rem' }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && nickname.trim() && roomId.trim()) {
-                    handleJoinRoom();
-                  }
-                }}
-              />
-              <button onClick={handleJoinRoom} className={styles.joinButton}>
-                Unirse
+            <div className={styles.actionButtons}>
+              <button
+                type="button"
+                onClick={handleCreateRoom}
+                className={styles.primaryButton}
+              >
+                Crear sala
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowJoinForm(true)}
+                className={styles.primaryButton}
+              >
+                Unirse a sala
               </button>
             </div>
 
-            <div className={styles.divider}>
-              <span>o</span>
-            </div>
-
-            <button onClick={handleCreateRoom} className={styles.button}>
-              Crear sala
-            </button>
+            {showJoinForm && (
+              <div className={styles.joinExpand}>
+                <input
+                  type="text"
+                  placeholder="Código de sala (ej: ABC123)"
+                  value={roomId}
+                  onChange={(e) => {
+                    const value = e.target.value.toUpperCase();
+                    if (/^[A-Z0-9]*$/.test(value) || value === '') {
+                      setRoomId(value);
+                    }
+                  }}
+                  className={styles.input}
+                  maxLength={6}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && nickname.trim() && roomId.trim()) {
+                      handleJoinRoom();
+                    }
+                  }}
+                />
+                <div className={styles.joinExpandActions}>
+                  <button
+                    type="button"
+                    onClick={handleJoinRoom}
+                    className={styles.primaryButton}
+                  >
+                    Entrar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowJoinForm(false)}
+                    className={styles.cancelButton}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

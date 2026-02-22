@@ -10,6 +10,8 @@ export interface UseDeviceSelectionReturn {
   selectedOutputId: string;
   setSelectedInputId: (id: string) => void;
   setSelectedOutputId: (id: string) => void;
+  /** Vuelve a listar dispositivos (útil tras conceder permiso de micrófono). */
+  refreshDevices: () => Promise<void>;
 }
 
 export function useDeviceSelection(): UseDeviceSelectionReturn {
@@ -72,5 +74,6 @@ export function useDeviceSelection(): UseDeviceSelectionReturn {
     selectedOutputId,
     setSelectedInputId,
     setSelectedOutputId,
+    refreshDevices: enumerateDevices,
   };
 }

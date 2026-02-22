@@ -1,6 +1,10 @@
 /**
  * Configuración de formatos de batalla y offsets de intros de beats
+ * Basado en reglas reales de freestyle (FMS/Red Bull)
+ * 1 barra = 16 segundos reales
  */
+
+export const BAR_DURATION = 16; // 1 barra = 16 segundos reales
 
 export type BattleFormat = '4x4' | '8x8' | 'minuto-libre';
 
@@ -20,7 +24,7 @@ export const BATTLE_FORMATS: Record<BattleFormat, BattleFormatConfig> = {
     description: '4 versos de 4 líneas cada uno',
     verses: 4,
     linesPerVerse: 4,
-    timePerTurnSeconds: 60, // 60 segundos por turno
+    timePerTurnSeconds: 16, // Corregido: 16 segundos (1 barra)
   },
   '8x8': {
     format: '8x8',
@@ -28,7 +32,7 @@ export const BATTLE_FORMATS: Record<BattleFormat, BattleFormatConfig> = {
     description: '8 versos de 8 líneas cada uno',
     verses: 8,
     linesPerVerse: 8,
-    timePerTurnSeconds: 120, // 120 segundos por turno
+    timePerTurnSeconds: 32, // Corregido: 32 segundos (2 barras)
   },
   'minuto-libre': {
     format: 'minuto-libre',

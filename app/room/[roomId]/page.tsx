@@ -1,6 +1,6 @@
 'use client';
 
-import { useSearchParams, useParams } from 'next/navigation';
+import { useSearchParams, useParams, useRouter } from 'next/navigation';
 import React, { useEffect, useState, useRef, Suspense, useCallback } from 'react';
 import { useWebRTC, WebRTCState } from '@/hooks/useWebRTC';
 import { useAudioControls } from '@/hooks/useAudioControls';
@@ -22,6 +22,7 @@ interface PeerInfo {
 function RoomPageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const rawRoomId = params.roomId as string;
   let roomId = '';
   try {
@@ -42,7 +43,6 @@ function RoomPageContent() {
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [isReady, setIsReady] = useState(false);
-  const [countdown, setCountdown] = useState<number | null>(null);
   const [battleStarted, setBattleStarted] = useState(false);
   const [beatAudio, setBeatAudio] = useState<HTMLAudioElement | null>(null);
   const [selectedBeat, setSelectedBeat] = useState<number>(1);
@@ -50,6 +50,11 @@ function RoomPageContent() {
   const [isBeatPlaying, setIsBeatPlaying] = useState(false);
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [battleFormat, setBattleFormat] = useState<BattleFormat | null>(null);
+  const [battleEntries, setBattleEntries] = useState<number | null>(null);
+  const [customTurnSeconds, setCustomTurnSeconds] = useState<number | null>(null); // Segundos personalizados por turno
+  const [customTurnSecondsInput, setCustomTurnSecondsInput] = useState<string>(''); // Estado local para el input
+  const [completedTurns, setCompletedTurns] = useState<Set<number>>(new Set());
+  const [activeSegmentIndex, setActiveSegmentIndex] = useState<number>(0);
   const [currentTurn, setCurrentTurn] = useState<{ userId: string; turnNumber: number; startTime: number; beatStartTime: number } | null>(null);
   const [turnProgress, setTurnProgress] = useState<{ verses: number; lines: number } | { timeRemaining: number } | null>(null);
   const [beatIntroOffset, setBeatIntroOffset] = useState<number>(0);
@@ -61,19 +66,44 @@ function RoomPageContent() {
   const [cachipumStarter, setCachipumStarter] = useState<string | null>(null);
   const [showCachipum, setShowCachipum] = useState<boolean>(false);
   const [showCachipumDecision, setShowCachipumDecision] = useState<boolean>(false);
+  const [showCachipumLoser, setShowCachipumLoser] = useState<boolean>(false);
   const [showCachipumAnimation, setShowCachipumAnimation] = useState<boolean>(false);
   const [currentCachipumRoundDisplay, setCurrentCachipumRoundDisplay] = useState<number>(0);
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isBeatModalOpen, setIsBeatModalOpen] = useState<boolean>(false);
+  const [isFormatModalOpen, setIsFormatModalOpen] = useState<boolean>(false);
+  const [previewingBeat, setPreviewingBeat] = useState<number | null>(null);
+  const [previewBeatTime, setPreviewBeatTime] = useState<number>(0);
+  const [isPreviewPaused, setIsPreviewPaused] = useState<boolean>(false);
+  const [activeBeatTab, setActiveBeatTab] = useState<number>(1);
+  const [localMicLevel, setLocalMicLevel] = useState<number>(0);
+  const [remoteMicLevels, setRemoteMicLevels] = useState<Map<string, number>>(new Map());
+
+  // ─── Cambiar pestaña de beat ───
+  const handleBeatTabChange = useCallback((beatNum: number) => {
+    // Si hay un beat reproduciéndose y cambiamos a otra pestaña, detenerlo
+    if (previewingBeat !== null && previewingBeat !== beatNum) {
+      const audio = previewAudioRefs.current.get(previewingBeat);
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+      setPreviewingBeat(null);
+      setPreviewBeatTime(0);
+      setIsPreviewPaused(false);
+    }
+    setActiveBeatTab(beatNum);
+  }, [previewingBeat]);
 
   // ─── Refs ───
   const userIdRef = useRef(`user-${Date.now()}-${Math.random()}`);
   const signalingRef = useRef<PusherSignalingClient | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const webrtcHandleMessageRef = useRef<((message: SignalingMessage) => void) | null>(null);
-  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const countdownStartedRef = useRef(false);
   const beatAudioRef = useRef<HTMLAudioElement | null>(null);
   const beatGainNodeRef = useRef<GainNode | null>(null);
   const beatSourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const previewAudioRefs = useRef<Map<number, HTMLAudioElement>>(new Map());
   const peersRef = useRef<Map<string, { nickname: string }>>(new Map());
   // Callback refs for signaling handler
   const startConnectionRef = useRef<(remoteUserId: string, isInitiator: boolean) => Promise<void>>();
@@ -90,8 +120,15 @@ function RoomPageContent() {
   const battleFormatRef = useRef<BattleFormat | null>(null);
   const currentTurnRef = useRef<{ userId: string; turnNumber: number; startTime: number; beatStartTime: number } | null>(null);
   const turnProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pausedTimeRef = useRef<number | null>(null); // Tiempo cuando se pausó
+  const elapsedBeforePauseRef = useRef<number>(0); // Tiempo transcurrido antes de pausar
+  const cachipumStarterRef = useRef<string | null>(null); // Ref para cachipumStarter
+  const cachipumProcessingRef = useRef<boolean>(false); // Evitar doble procesamiento en host
   const audioAnalyserRef = useRef<AnalyserNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const localMicSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const remoteMicAnalyserRefs = useRef<Map<string, { source: MediaStreamAudioSourceNode; analyser: AnalyserNode }>>(new Map());
+  const micLevelIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ─── Device Selection ───
   const {
@@ -140,23 +177,46 @@ function RoomPageContent() {
 
   // ─── Turn System Helpers ───
   const getOrderedUserIds = useCallback((): string[] => {
-    const allUsers = [userIdRef.current, ...Array.from(peers.keys())];
-    const sorted = allUsers.sort();
+    // Usar peersRef para obtener la información más reciente
+    const currentPeers = peersRef.current || peers;
+    // Usar cachipumStarterRef para obtener el valor más reciente
+    const currentCachipumStarter = cachipumStarterRef.current || cachipumStarter;
+    const allUsers = [userIdRef.current, ...Array.from(currentPeers.keys())];
     
-    // Si hay un cachipumStarter, ponerlo primero
-    if (cachipumStarter) {
-      const starterIndex = sorted.indexOf(cachipumStarter);
+    // Si hay un cachipumStarter, debe ir primero sin importar el orden alfabético
+    if (currentCachipumStarter) {
+      // Crear un Set para eliminar duplicados
+      const uniqueUsers = new Set(allUsers);
+      // Asegurarse de que el cachipumStarter esté en la lista
+      uniqueUsers.add(currentCachipumStarter);
+      // Convertir a array, ordenar alfabéticamente
+      const sorted = Array.from(uniqueUsers).sort();
+      // Mover el cachipumStarter al principio
+      const starterIndex = sorted.indexOf(currentCachipumStarter);
       if (starterIndex > 0) {
         sorted.splice(starterIndex, 1);
-        sorted.unshift(cachipumStarter);
+        sorted.unshift(currentCachipumStarter);
       }
+      return sorted;
     }
     
-    return sorted;
+    // Si no hay cachipumStarter, simplemente ordenar alfabéticamente
+    return Array.from(new Set(allUsers)).sort();
   }, [peers, cachipumStarter]);
 
   const startTurn = useCallback((userId: string, turnNumber: number, format: BattleFormat) => {
     if (!isHost) return;
+
+    // Si es el primer turno, SIEMPRE usar el cachipumStarter si está disponible
+    let finalUserId = userId;
+    if (turnNumber === 1) {
+      // Priorizar el ref (más actualizado), luego el state
+      const currentCachipumStarter = cachipumStarterRef.current || cachipumStarter;
+      if (currentCachipumStarter) {
+        // Forzar el uso del cachipumStarter, ignorar el userId pasado como parámetro
+        finalUserId = currentCachipumStarter;
+      }
+    }
 
     // El tiempo del turno comienza desde el offset del beat
     // startTime es el timestamp del sistema cuando el beat llegará al offset
@@ -168,21 +228,69 @@ function RoomPageContent() {
     const timeUntilOffset = Math.max(0, (beatIntroOffset - currentBeatTime) * 1000);
     const startTime = now + timeUntilOffset;
     
-    setCurrentTurn({ userId, turnNumber, startTime, beatStartTime });
-    currentTurnRef.current = { userId, turnNumber, startTime, beatStartTime };
+    // Resetear referencias de pausa cuando comienza un nuevo turno
+    pausedTimeRef.current = null;
+    elapsedBeforePauseRef.current = 0;
+    
+    // Obtener el nickname del usuario que tiene el turno
+    // Para el primer turno, SIEMPRE usar el cachipumStarter y obtener su nickname
+    let turnNickname: string | undefined;
+    if (turnNumber === 1) {
+      // Si es el primer turno, usar el cachipumStarter para obtener el nickname correcto
+      const currentCachipumStarter = cachipumStarterRef.current || cachipumStarter;
+      if (currentCachipumStarter) {
+        if (currentCachipumStarter === userIdRef.current) {
+          turnNickname = nickname;
+        } else {
+          const peerInfo = peersRef.current?.get(currentCachipumStarter) || peers.get(currentCachipumStarter);
+          if (peerInfo) {
+            turnNickname = 'nickname' in peerInfo ? peerInfo.nickname : (peerInfo as any).nickname;
+          }
+        }
+      }
+    }
+    
+    // Si no se obtuvo el nickname (turnos siguientes o fallback), usar la lógica normal
+    if (!turnNickname) {
+      if (finalUserId === userIdRef.current) {
+        turnNickname = nickname;
+      } else {
+        const peerInfo = peersRef.current?.get(finalUserId) || peers.get(finalUserId);
+        if (peerInfo) {
+          turnNickname = 'nickname' in peerInfo ? peerInfo.nickname : (peerInfo as any).nickname;
+        }
+      }
+    }
 
+    // Actualizar ref primero para evitar problemas de timing
+    // Incluir el nickname en turnData para que todos (host y oponentes) usen la misma fuente
+    const turnData: any = { 
+      userId: finalUserId, 
+      turnNumber, 
+      startTime, 
+      beatStartTime,
+      nickname: turnNickname, // Guardar el nickname para renderizado consistente
+    };
+    currentTurnRef.current = turnData;
+    
+    // Actualizar estados de forma batch para evitar múltiples re-renderizados
+    setCurrentTurn(turnData);
+    setActiveSegmentIndex(turnNumber - 1);
+    
+    const config = getBattleFormatConfig(format);
+    const turnDuration = customTurnSeconds || config.timePerTurnSeconds || 60;
+    setTurnProgress({ timeRemaining: turnDuration });
+
+    // Enviar mensaje después de actualizar estados
     signalingRef.current?.send({
       type: 'turn-started',
-      userId,
+      userId: finalUserId,
       turnNumber,
       startTime,
       format,
+      nickname: turnNickname,
     });
-
-    // Inicializar progreso según formato
-    const config = getBattleFormatConfig(format);
-    setTurnProgress({ timeRemaining: config.timePerTurnSeconds || 60 });
-  }, [isHost, beatIntroOffset, beatAudio]);
+  }, [isHost, beatIntroOffset, beatAudio, cachipumStarter]);
 
   const endTurn = useCallback((userId: string, turnNumber: number) => {
     if (!isHost) return;
@@ -192,6 +300,9 @@ function RoomPageContent() {
       userId,
       turnNumber,
     });
+
+    // Marcar turno como completado en el diagrama
+    setCompletedTurns(prev => new Set(prev).add(turnNumber));
 
     setCurrentTurn(null);
     currentTurnRef.current = null;
@@ -209,29 +320,55 @@ function RoomPageContent() {
     const orderedUsers = getOrderedUserIds();
     if (orderedUsers.length === 0) return;
 
-    const currentTurnNum = currentTurnRef.current?.turnNumber || 0;
-    const currentUserId = currentTurnRef.current?.userId;
+    const currentTurnData = currentTurnRef.current;
+    if (!currentTurnData) return;
     
-    // Encontrar índice del usuario actual
-    const currentIndex = currentUserId ? orderedUsers.indexOf(currentUserId) : -1;
+    const currentTurnNum = currentTurnData.turnNumber;
+    const currentUserId = currentTurnData.userId;
+    
+    // Verificar si se alcanzó el número máximo de turnos según battleEntries
+    if (battleEntries && currentTurnNum >= battleEntries) {
+      // Batalla terminada - finalizar turno actual y no iniciar siguiente
+      endTurn(currentUserId, currentTurnNum);
+      return;
+    }
+    
+    // Encontrar índice del usuario actual en la lista ordenada
+    const currentIndex = orderedUsers.indexOf(currentUserId);
+    if (currentIndex === -1) {
+      // Si el usuario actual no está en la lista, usar el primero
+      const nextUserId = orderedUsers[0];
+      const nextTurnNum = currentTurnNum + 1;
+      endTurn(currentUserId, currentTurnNum);
+      if (!battleEntries || nextTurnNum <= battleEntries) {
+        setTimeout(() => {
+          startTurn(nextUserId, nextTurnNum, battleFormatRef.current!);
+        }, 500);
+      }
+      return;
+    }
+    
     const nextIndex = (currentIndex + 1) % orderedUsers.length;
     const nextUserId = orderedUsers[nextIndex];
     const nextTurnNum = currentTurnNum + 1;
 
-    // Finalizar turno actual si existe
-    if (currentUserId) {
-      endTurn(currentUserId, currentTurnNum);
-    }
+    // Finalizar turno actual
+    endTurn(currentUserId, currentTurnNum);
 
-    // Iniciar siguiente turno
-    setTimeout(() => {
-      startTurn(nextUserId, nextTurnNum, battleFormatRef.current!);
-    }, 500);
-  }, [isHost, getOrderedUserIds, startTurn, endTurn]);
+    // Iniciar siguiente turno solo si no se excedió el límite
+    if (!battleEntries || nextTurnNum <= battleEntries) {
+      setTimeout(() => {
+        startTurn(nextUserId, nextTurnNum, battleFormatRef.current!);
+      }, 500);
+    }
+  }, [isHost, getOrderedUserIds, startTurn, endTurn, battleEntries]);
 
   // ─── Battle Logic ───
   const startBattle = useCallback(async (serverTimestamp: number) => {
     setBattleStarted(true);
+    // Resetear estados del diagrama al iniciar batalla
+    setCompletedTurns(new Set());
+    setActiveSegmentIndex(0);
     await audioContextManager.tryResume();
 
     const now = Date.now();
@@ -254,12 +391,31 @@ function RoomPageContent() {
 
           // Iniciar primer turno inmediatamente (el tiempo comenzará a contar desde el offset)
           if (battleFormatRef.current) {
-            const orderedUsers = getOrderedUserIds();
-            if (orderedUsers.length > 0) {
-              setTimeout(() => {
-                startTurn(orderedUsers[0], 1, battleFormatRef.current!);
-              }, 100);
-            }
+            // Esperar un poco para asegurar que el cachipumStarter esté disponible
+            const waitForStarter = (attempts: number = 0) => {
+              // Priorizar el ref (más actualizado), luego el state
+              const currentCachipumStarter = cachipumStarterRef.current || cachipumStarter;
+              if (currentCachipumStarter) {
+                // Usar directamente el cachipumStarter
+                setTimeout(() => {
+                  // startTurn() validará nuevamente, pero pasamos el cachipumStarter para ser explícitos
+                  startTurn(currentCachipumStarter, 1, battleFormatRef.current!);
+                }, 100);
+              } else if (attempts < 20) {
+                // Esperar un poco más si no está disponible (hasta 2 segundos)
+                setTimeout(() => waitForStarter(attempts + 1), 100);
+              } else {
+                // Fallback después de 2 segundos: usar getOrderedUserIds()
+                // Pero esto no debería pasar si el cachipum se completó correctamente
+                const orderedUsers = getOrderedUserIds();
+                if (orderedUsers.length > 0) {
+                  setTimeout(() => {
+                    startTurn(orderedUsers[0], 1, battleFormatRef.current!);
+                  }, 100);
+                }
+              }
+            };
+            waitForStarter();
           }
         }
       }
@@ -269,9 +425,29 @@ function RoomPageContent() {
   const toggleBeat = useCallback(async () => {
     if (!isHost) return;
     if (isBeatPlaying) {
+      // Guardar el tiempo transcurrido antes de pausar
+      if (currentTurnRef.current) {
+        const now = Date.now();
+        const elapsed = (now - currentTurnRef.current.startTime) / 1000;
+        elapsedBeforePauseRef.current = elapsed;
+        pausedTimeRef.current = now;
+      }
       pauseBeat();
       signalingRef.current?.send({ type: 'beat-pause' });
     } else {
+      // Ajustar el startTime cuando se reanuda
+      if (currentTurnRef.current && pausedTimeRef.current !== null) {
+        const now = Date.now();
+        const pauseDuration = (now - pausedTimeRef.current) / 1000;
+        // Ajustar startTime para compensar el tiempo pausado
+        const newStartTime = currentTurnRef.current.startTime + (pauseDuration * 1000);
+        currentTurnRef.current.startTime = newStartTime;
+        setCurrentTurn({
+          ...currentTurnRef.current,
+          startTime: newStartTime,
+        });
+        pausedTimeRef.current = null;
+      }
       const success = await playBeat();
       if (success) {
         signalingRef.current?.send({ type: 'beat-play' });
@@ -302,6 +478,40 @@ function RoomPageContent() {
       signalingRef.current?.send({ type: 'beat-restart' });
     })();
   }, [isHost, restartBeatInternal, getOrderedUserIds, startTurn, endTurn]);
+
+  // ─── Reset Battle (reiniciar completamente la batalla) ───
+  const resetBattle = useCallback(async () => {
+    if (!isHost) return;
+    
+    // Detener el beat
+    if (beatAudioRef.current) {
+      beatAudioRef.current.pause();
+      beatAudioRef.current.currentTime = 0;
+    }
+    setIsBeatPlaying(false);
+    
+    // Limpiar intervalos
+    if (turnProgressIntervalRef.current) {
+      clearInterval(turnProgressIntervalRef.current);
+      turnProgressIntervalRef.current = null;
+    }
+    
+    // Resetear todos los estados de la batalla
+    setBattleStarted(false);
+    setCurrentTurn(null);
+    currentTurnRef.current = null;
+    setTurnProgress(null);
+    setCompletedTurns(new Set());
+    setActiveSegmentIndex(0);
+    setIsReady(false);
+    
+    // Resetear referencias de pausa
+    pausedTimeRef.current = null;
+    elapsedBeforePauseRef.current = 0;
+    
+    // Enviar mensaje a los peers para sincronizar
+    signalingRef.current?.send({ type: 'battle-reset' });
+  }, [isHost]);
 
   // ─── WebRTC Hook ───
   const {
@@ -340,6 +550,11 @@ function RoomPageContent() {
   useEffect(() => {
     peersRef.current = peers;
   }, [peers]);
+
+  // Mantener cachipumStarterRef actualizado con el estado de cachipumStarter
+  useEffect(() => {
+    cachipumStarterRef.current = cachipumStarter;
+  }, [cachipumStarter]);
 
   const replaceLocalStreamRef = useRef(replaceLocalStream);
 
@@ -514,6 +729,17 @@ function RoomPageContent() {
             }
             break;
 
+          case 'not-ready':
+            if (message.userId !== userIdRef.current) {
+              setPeers(prev => {
+                const next = new Map(prev);
+                const peer = next.get(message.userId);
+                if (peer) next.set(message.userId, { ...peer, isReady: false });
+                return next;
+              });
+            }
+            break;
+
           case 'start-battle':
             startBattleRef.current?.(message.timestamp);
             break;
@@ -526,6 +752,19 @@ function RoomPageContent() {
 
           case 'beat-play':
             if (!isHostRef.current) {
+              // Ajustar el startTime cuando se reanuda
+              if (currentTurnRef.current && pausedTimeRef.current !== null) {
+                const now = Date.now();
+                const pauseDuration = (now - pausedTimeRef.current) / 1000;
+                // Ajustar startTime para compensar el tiempo pausado
+                const newStartTime = currentTurnRef.current.startTime + (pauseDuration * 1000);
+                currentTurnRef.current.startTime = newStartTime;
+                setCurrentTurn({
+                  ...currentTurnRef.current,
+                  startTime: newStartTime,
+                });
+                pausedTimeRef.current = null;
+              }
               (async () => {
                 let attempts = 0;
                 const maxAttempts = isMobileRef.current ? 50 : 30;
@@ -551,7 +790,16 @@ function RoomPageContent() {
             break;
 
           case 'beat-pause':
-            if (!isHostRef.current) pauseBeatRef.current?.();
+            if (!isHostRef.current) {
+              // Guardar el tiempo transcurrido antes de pausar
+              if (currentTurnRef.current) {
+                const now = Date.now();
+                const elapsed = (now - currentTurnRef.current.startTime) / 1000;
+                elapsedBeforePauseRef.current = elapsed;
+                pausedTimeRef.current = now;
+              }
+              pauseBeatRef.current?.();
+            }
             break;
 
           case 'beat-restart':
@@ -569,11 +817,53 @@ function RoomPageContent() {
             }
             break;
 
+          case 'battle-reset':
+            if (message.userId !== userIdRef.current) {
+              // Detener el beat
+              if (beatAudioRef.current) {
+                beatAudioRef.current.pause();
+                beatAudioRef.current.currentTime = 0;
+              }
+              setIsBeatPlaying(false);
+              
+              // Limpiar intervalos
+              if (turnProgressIntervalRef.current) {
+                clearInterval(turnProgressIntervalRef.current);
+                turnProgressIntervalRef.current = null;
+              }
+              
+              // Resetear todos los estados de la batalla
+              setBattleStarted(false);
+              setCurrentTurn(null);
+              currentTurnRef.current = null;
+              setTurnProgress(null);
+              setCompletedTurns(new Set());
+              setActiveSegmentIndex(0);
+              setIsReady(false);
+              
+              // Resetear referencias de pausa
+              pausedTimeRef.current = null;
+              elapsedBeforePauseRef.current = 0;
+            }
+            break;
+
           case 'battle-format-selected':
             if (message.userId !== userIdRef.current) {
               setBattleFormat(message.format);
               battleFormatRef.current = message.format;
-              // Iniciar cachipum cuando se selecciona formato
+              setBattleEntries(message.totalEntries);
+              if (message.customTurnSeconds !== undefined) {
+                setCustomTurnSeconds(message.customTurnSeconds);
+                setCustomTurnSecondsInput(message.customTurnSeconds.toString());
+              }
+              // NO iniciar cachipum automáticamente - se hace manualmente con el botón
+            }
+            break;
+
+          case 'cachipum-start':
+            cachipumProcessingRef.current = false;
+            if (message.userId && message.userId !== userIdRef.current) {
+              // Iniciar cachipum cuando el host lo solicita
               setShowCachipum(true);
               setCachipumRound(1);
               setCachipumChoices(new Map());
@@ -587,27 +877,59 @@ function RoomPageContent() {
             // El tiempo del turno comienza desde el offset del beat
             // Asegurarse de usar el offset actual del beat seleccionado
             const beatStartTime = beatIntroOffset;
-            setCurrentTurn({
-              userId: message.userId,
-              turnNumber: message.turnNumber,
-              startTime: message.startTime,
-              beatStartTime,
-            });
-            currentTurnRef.current = {
-              userId: message.userId,
+            // Resetear referencias de pausa cuando comienza un nuevo turno
+            pausedTimeRef.current = null;
+            elapsedBeforePauseRef.current = 0;
+            
+            // Para el primer turno, SIEMPRE usar el cachipumStarter si está disponible
+            // Esto asegura que todos vean el nombre del ganador del cachipum
+            let finalUserId = message.userId;
+            let finalNickname = message.nickname;
+            
+            if (message.turnNumber === 1) {
+              const currentCachipumStarter = cachipumStarterRef.current || cachipumStarter;
+              if (currentCachipumStarter) {
+                finalUserId = currentCachipumStarter;
+                // Obtener el nickname del cachipumStarter
+                if (currentCachipumStarter === userIdRef.current) {
+                  finalNickname = nickname;
+                } else {
+                  const peerInfo = peersRef.current?.get(currentCachipumStarter) || peers.get(currentCachipumStarter);
+                  if (peerInfo) {
+                    finalNickname = 'nickname' in peerInfo ? peerInfo.nickname : (peerInfo as any).nickname;
+                  }
+                }
+              }
+            }
+            
+            // Actualizar ref primero
+            const turnData: any = {
+              userId: finalUserId,
               turnNumber: message.turnNumber,
               startTime: message.startTime,
               beatStartTime,
             };
+            // Agregar nickname (priorizar el del cachipumStarter para turno 1, o el del mensaje)
+            if (finalNickname) {
+              turnData.nickname = finalNickname;
+            }
+            currentTurnRef.current = turnData;
+            
+            // Actualizar estados de forma batch para evitar múltiples re-renderizados
+            setCurrentTurn(turnData);
             setBattleFormat(message.format);
             battleFormatRef.current = message.format;
-            // Inicializar el progreso con el tiempo completo
+            setActiveSegmentIndex(message.turnNumber - 1);
+            
             const config = getBattleFormatConfig(message.format);
-            setTurnProgress({ timeRemaining: config.timePerTurnSeconds || 60 });
+            const turnDuration = customTurnSeconds || config.timePerTurnSeconds || 60;
+            setTurnProgress({ timeRemaining: turnDuration });
             break;
 
           case 'turn-ended':
             if (message.userId === currentTurnRef.current?.userId) {
+              // Marcar turno como completado en el diagrama
+              setCompletedTurns(prev => new Set(prev).add(message.turnNumber));
               setCurrentTurn(null);
               currentTurnRef.current = null;
               setTurnProgress(null);
@@ -694,15 +1016,12 @@ function RoomPageContent() {
             break;
 
           case 'cachipum-winner':
-            // Mostrar animación para todos los participantes
+            // Solo guardar ganador; la animación se abrirá cuando tengamos también los 3 resultados (useEffect)
             setCachipumWinner(message.winnerId);
-            // Iniciar animación de rondas para todos
-            setCurrentCachipumRoundDisplay(0);
-            setShowCachipumAnimation(true);
-            // El useEffect se encargará de iniciar la animación cuando los resultados estén disponibles
             break;
 
           case 'cachipum-restart':
+            cachipumProcessingRef.current = false;
             // Reiniciar cachipum si hay empate en las 3 rondas
             setCachipumChoices(new Map());
             setCachipumResults([]);
@@ -710,11 +1029,15 @@ function RoomPageContent() {
             setCachipumWinner(null);
             setShowCachipumAnimation(false);
             setCurrentCachipumRoundDisplay(0);
+            setShowCachipum(true); // Reabrir modal para jugar de nuevo
             break;
 
           case 'cachipum-starter-selected':
             setCachipumStarter(message.starterId);
+            // Actualizar el ref inmediatamente para evitar problemas de timing
+            cachipumStarterRef.current = message.starterId;
             setShowCachipumDecision(false);
+            setShowCachipumLoser(false); // Cerrar también el mensaje del perdedor
             setShowCachipum(false);
             break;
         }
@@ -751,6 +1074,87 @@ function RoomPageContent() {
       }
     }
   }, [remoteStreams]);
+
+  // ─── Medidor de nivel de micrófono (local + remotos) ───
+  useEffect(() => {
+    const ctx = audioContextManager.getContext();
+    const dataArray = new Uint8Array(256);
+
+    function getLevel(analyser: AnalyserNode): number {
+      analyser.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+      const avg = sum / dataArray.length;
+      return Math.min(1, (avg / 128) * 1.5);
+    }
+
+    if (localStream && localStream.getAudioTracks().length > 0) {
+      try {
+        const source = ctx.createMediaStreamSource(localStream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.8;
+        source.connect(analyser);
+        localMicSourceRef.current = source;
+        audioAnalyserRef.current = analyser;
+      } catch {
+        localMicSourceRef.current = null;
+        audioAnalyserRef.current = null;
+      }
+    } else {
+      localMicSourceRef.current = null;
+      audioAnalyserRef.current = null;
+    }
+
+    const prevRemote = remoteMicAnalyserRefs.current;
+    remoteMicAnalyserRefs.current = new Map();
+    remoteStreams.forEach((stream, userId) => {
+      if (stream.getAudioTracks().length === 0) return;
+      try {
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.8;
+        source.connect(analyser);
+        remoteMicAnalyserRefs.current.set(userId, { source, analyser });
+      } catch {
+        // skip this peer
+      }
+    });
+    prevRemote.forEach(({ source }) => {
+      try { source.disconnect(); } catch { /* already disconnected */ }
+    });
+
+    micLevelIntervalRef.current = setInterval(() => {
+      const localAnalyser = audioAnalyserRef.current;
+      if (localAnalyser) {
+        setLocalMicLevel(getLevel(localAnalyser));
+      } else {
+        setLocalMicLevel(0);
+      }
+      const next = new Map<string, number>();
+      remoteMicAnalyserRefs.current.forEach(({ analyser }, userId) => {
+        next.set(userId, getLevel(analyser));
+      });
+      setRemoteMicLevels(next);
+    }, 50);
+
+    return () => {
+      if (micLevelIntervalRef.current) {
+        clearInterval(micLevelIntervalRef.current);
+        micLevelIntervalRef.current = null;
+      }
+      if (localMicSourceRef.current) {
+        try { localMicSourceRef.current.disconnect(); } catch { /* ok */ }
+        localMicSourceRef.current = null;
+      }
+      audioAnalyserRef.current = null;
+      remoteMicAnalyserRefs.current.forEach(({ source }) => {
+        try { source.disconnect(); } catch { /* ok */ }
+      });
+      remoteMicAnalyserRefs.current = new Map();
+    };
+  }, [localStream, remoteStreams]);
 
   // ─── Mid-session mic device change ───
   const prevInputIdRef = useRef(selectedInputId);
@@ -798,6 +1202,35 @@ function RoomPageContent() {
     });
   }, [isReady]);
 
+  // ─── Handle Not Ready ───
+  const handleNotReady = useCallback(() => {
+    if (!isReady) return;
+    setIsReady(false);
+
+    signalingRef.current?.send({
+      type: 'not-ready',
+      userId: userIdRef.current,
+    });
+  }, [isReady]);
+
+  // ─── Salir de la sala (notificar a otros, desconectar y volver al inicio) ───
+  const handleLeaveRoom = useCallback(() => {
+    const channelName = `private-room-${roomId}`;
+    const payload = new Blob(
+      [JSON.stringify({
+        channel: channelName,
+        event: 'peer-disconnected',
+        data: { userId: userIdRef.current },
+      })],
+      { type: 'application/json' }
+    );
+    navigator.sendBeacon('/api/pusher/trigger', payload);
+    signalingRef.current?.disconnect();
+    signalingRef.current = null;
+    localStream?.getTracks().forEach(t => t.stop());
+    router.push('/');
+  }, [roomId, localStream, router]);
+
   // ─── Handle Click to Unlock AudioContext ───
   const handleContainerClick = useCallback(async () => {
     // Intentar desbloquear AudioContext con gesto del usuario
@@ -844,19 +1277,30 @@ function RoomPageContent() {
 
   // ─── Turn progress tracking ───
   useEffect(() => {
-    if (!battleStarted || !currentTurn || !battleFormat) return;
+    if (!battleStarted || !currentTurn || !battleFormat) {
+      // Si no hay turno activo, limpiar el intervalo pero mantener el estado
+      if (turnProgressIntervalRef.current) {
+        clearInterval(turnProgressIntervalRef.current);
+        turnProgressIntervalRef.current = null;
+      }
+      return;
+    }
 
     const format = battleFormat;
     const config = getBattleFormatConfig(format);
-    const duration = (config.timePerTurnSeconds || 60); // en segundos
+    const duration = (customTurnSeconds || config.timePerTurnSeconds || 60); // en segundos
 
-    // Limpiar intervalo anterior si existe
-    if (turnProgressIntervalRef.current) {
-      clearInterval(turnProgressIntervalRef.current);
-      turnProgressIntervalRef.current = null;
-    }
+    // Guardar referencia al turno actual para evitar problemas de closure
+    const currentTurnData = currentTurnRef.current || currentTurn;
 
     const updateProgress = () => {
+      // Verificar que el turno actual sigue siendo el mismo
+      const latestTurn = currentTurnRef.current;
+      if (!latestTurn || latestTurn.turnNumber !== currentTurnData.turnNumber || latestTurn.userId !== currentTurnData.userId) {
+        // El turno cambió, no actualizar
+        return;
+      }
+
       // Solo actualizar si el beat está reproduciéndose
       if (!isBeatPlaying) {
         // Si está pausado, mantener el tiempo actual sin actualizar
@@ -866,11 +1310,17 @@ function RoomPageContent() {
       // Usar el tiempo del sistema para sincronizar entre usuarios
       // startTime es el timestamp cuando el beat llegó al offset
       const now = Date.now();
-      const startTime = currentTurn.startTime;
+      const startTime = currentTurnData.startTime;
       
       // Si aún no ha llegado el tiempo del offset, mostrar el tiempo completo
       if (now < startTime) {
-        setTurnProgress({ timeRemaining: duration });
+        setTurnProgress(prev => {
+          // Solo actualizar si el valor cambió para evitar re-renders innecesarios
+          if (!prev || !('timeRemaining' in prev) || prev.timeRemaining !== duration) {
+            return { timeRemaining: duration };
+          }
+          return prev;
+        });
         return;
       }
 
@@ -880,15 +1330,38 @@ function RoomPageContent() {
       const remaining = Math.max(0, duration - elapsed);
       const remainingSeconds = Math.ceil(remaining);
 
-      // Solo actualizar si el tiempo restante es válido
+      // Solo actualizar si el tiempo restante es válido y cambió
       if (remainingSeconds >= 0 && remainingSeconds <= duration) {
-        setTurnProgress({ timeRemaining: remainingSeconds });
+        setTurnProgress(prev => {
+          // Solo actualizar si el valor cambió para evitar re-renders innecesarios
+          if (!prev || !('timeRemaining' in prev) || prev.timeRemaining !== remainingSeconds) {
+            return { timeRemaining: remainingSeconds };
+          }
+          return prev;
+        });
       }
 
       if (remaining <= 0 && isHost) {
-        nextTurn();
+        // Verificar que el turno sigue siendo el mismo antes de cambiar
+        const finalTurn = currentTurnRef.current;
+        if (finalTurn && finalTurn.turnNumber === currentTurnData.turnNumber && finalTurn.userId === currentTurnData.userId) {
+          // Verificar si se completaron todos los turnos según battleEntries
+          if (battleEntries && currentTurnData.turnNumber >= battleEntries) {
+            // Batalla terminada - no iniciar siguiente turno
+            endTurn(currentTurnData.userId, currentTurnData.turnNumber);
+          } else {
+            nextTurn();
+          }
+        }
       }
     };
+
+    // Limpiar intervalo anterior solo si el turno realmente cambió
+    const previousInterval = turnProgressIntervalRef.current;
+    if (previousInterval) {
+      clearInterval(previousInterval);
+      turnProgressIntervalRef.current = null;
+    }
 
     // Actualizar inmediatamente
     updateProgress();
@@ -901,12 +1374,25 @@ function RoomPageContent() {
     }, 100);
 
     return () => {
+      // Limpiar el intervalo cuando el efecto se desmonte o cambien las dependencias
       if (turnProgressIntervalRef.current) {
         clearInterval(turnProgressIntervalRef.current);
         turnProgressIntervalRef.current = null;
       }
     };
-  }, [battleStarted, currentTurn, battleFormat, isHost, nextTurn, isBeatPlaying, beatAudio, beatIntroOffset]);
+  }, [battleStarted, currentTurn, battleFormat, isHost, nextTurn, isBeatPlaying, beatAudio, beatIntroOffset, customTurnSeconds, battleEntries, endTurn]);
+
+  // ─── Cerrar modal de cachipum cuando el usuario complete sus 3 opciones ───
+  useEffect(() => {
+    if (!showCachipum) return;
+    
+    const myChoices = cachipumChoices.get(userIdRef.current) || [];
+    
+    // Cerrar el modal inmediatamente cuando el usuario complete sus 3 opciones
+    if (myChoices.length === 3) {
+      setShowCachipum(false);
+    }
+  }, [showCachipum, cachipumChoices]);
 
   // ─── Offset Change (host only) ───
   const handleOffsetChange = useCallback((beatNumber: number, offset: number) => {
@@ -931,6 +1417,128 @@ function RoomPageContent() {
     });
   }, [isHost, selectedBeat]);
 
+  // ─── Beat Preview ───
+  const handleBeatPreview = useCallback(async (beatNumber: number) => {
+    // Si ya está reproduciendo este beat, pausar/reanudar
+    if (previewingBeat === beatNumber) {
+      const audio = previewAudioRefs.current.get(beatNumber);
+      if (audio) {
+        if (isPreviewPaused) {
+          await audio.play();
+          setIsPreviewPaused(false);
+        } else {
+          audio.pause();
+          setIsPreviewPaused(true);
+        }
+      }
+      return;
+    }
+
+    // Detener cualquier otra previsualización
+    if (previewingBeat !== null) {
+      const prevAudio = previewAudioRefs.current.get(previewingBeat);
+      if (prevAudio) {
+        prevAudio.pause();
+        prevAudio.currentTime = 0;
+      }
+    }
+
+    // Obtener o crear el audio para este beat
+    let audio = previewAudioRefs.current.get(beatNumber);
+    if (!audio) {
+      audio = new Audio(`/beats/beat${beatNumber}.mp3`);
+      audio.loop = true;
+      audio.setAttribute('playsinline', 'true');
+      audio.setAttribute('preload', 'auto');
+      audio.volume = beatVolume;
+      
+      // Actualizar tiempo cuando el audio se reproduce
+      const audioForListener = audio;
+      audio.addEventListener('timeupdate', () => {
+        setPreviewBeatTime(audioForListener.currentTime);
+      });
+      
+      previewAudioRefs.current.set(beatNumber, audio);
+    }
+
+    try {
+      await audioContextManager.unlockFromGesture();
+      audio.currentTime = 0;
+      setPreviewBeatTime(0);
+      await audio.play();
+      setPreviewingBeat(beatNumber);
+      setIsPreviewPaused(false);
+    } catch (err) {
+      console.error('Error al previsualizar beat:', err);
+    }
+  }, [previewingBeat, beatVolume, isPreviewPaused]);
+
+  // ─── Formatear tiempo a MM:SS ───
+  const formatTime = useCallback((seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }, []);
+
+  // ─── Reiniciar previsualización ───
+  const handleBeatPreviewRestart = useCallback(() => {
+    if (previewingBeat === null) return;
+    const audio = previewAudioRefs.current.get(previewingBeat);
+    if (audio) {
+      audio.currentTime = 0;
+      setPreviewBeatTime(0);
+      if (!isPreviewPaused) {
+        audio.play();
+      }
+    }
+  }, [previewingBeat, isPreviewPaused]);
+
+  // ─── Actualizar tiempo del beat en previsualización ───
+  useEffect(() => {
+    if (previewingBeat === null || isPreviewPaused) return;
+
+    const interval = setInterval(() => {
+      const audio = previewAudioRefs.current.get(previewingBeat);
+      if (audio) {
+        setPreviewBeatTime(audio.currentTime);
+      }
+    }, 100); // Actualizar cada 100ms
+
+    return () => clearInterval(interval);
+  }, [previewingBeat, isPreviewPaused]);
+
+  // ─── Sincronizar volumen de previsualización ───
+  useEffect(() => {
+    previewAudioRefs.current.forEach((audio) => {
+      audio.volume = beatVolume;
+    });
+  }, [beatVolume]);
+
+  // ─── Detener todas las previsualizaciones al cerrar el modal ───
+  useEffect(() => {
+    if (!isBeatModalOpen && previewingBeat !== null) {
+      const audio = previewAudioRefs.current.get(previewingBeat);
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+      setPreviewingBeat(null);
+      setPreviewBeatTime(0);
+      setIsPreviewPaused(false);
+    }
+  }, [isBeatModalOpen, previewingBeat]);
+
+  // ─── Limpiar audios de previsualización al desmontar ───
+  useEffect(() => {
+    return () => {
+      previewAudioRefs.current.forEach((audio) => {
+        audio.pause();
+        audio.src = '';
+      });
+      previewAudioRefs.current.clear();
+    };
+  }, []);
+
   // ─── Beat Change (host only) ───
   const handleBeatChange = useCallback((beatNumber: number) => {
     if (!isHost) return;
@@ -953,18 +1561,73 @@ function RoomPageContent() {
     if (!isHost) return;
     setBattleFormat(format);
     battleFormatRef.current = format;
-    signalingRef.current?.send({
-      type: 'battle-format-selected',
-      format,
-    });
-    // Iniciar cachipum después de seleccionar formato
+    // Si hay segundos personalizados, usarlos; si no, usar los del formato
+    const config = getBattleFormatConfig(format);
+    if (customTurnSeconds === null) {
+      const defaultSeconds = config.timePerTurnSeconds || 60;
+      setCustomTurnSeconds(defaultSeconds);
+      setCustomTurnSecondsInput(defaultSeconds.toString());
+    }
+    // Solo enviar si también hay entradas seleccionadas
+    if (battleEntries !== null) {
+      signalingRef.current?.send({
+        type: 'battle-format-selected',
+        format,
+        totalEntries: battleEntries,
+        customTurnSeconds: customTurnSeconds || config.timePerTurnSeconds || 60,
+      });
+    }
+    // NO iniciar cachipum automáticamente - se hace manualmente con el botón
+  }, [isHost, battleEntries, customTurnSeconds]);
+
+  // ─── Battle Entries Change (host only) ───
+  const handleEntriesChange = useCallback((entries: number) => {
+    if (!isHost) return;
+    setBattleEntries(entries);
+    // Solo enviar si también hay formato seleccionado
+    if (battleFormat) {
+      const config = getBattleFormatConfig(battleFormat);
+      signalingRef.current?.send({
+        type: 'battle-format-selected',
+        format: battleFormat,
+        totalEntries: entries,
+        customTurnSeconds: customTurnSeconds || config.timePerTurnSeconds || 60,
+      });
+    }
+  }, [isHost, battleFormat, customTurnSeconds]);
+
+  // ─── Custom Turn Seconds Change (host only) ───
+  const handleCustomTurnSecondsChange = useCallback((seconds: number) => {
+    if (!isHost) return;
+    setCustomTurnSeconds(seconds);
+    setCustomTurnSecondsInput(seconds.toString());
+    // Solo enviar si también hay formato y entradas seleccionados
+    if (battleFormat && battleEntries !== null) {
+      signalingRef.current?.send({
+        type: 'battle-format-selected',
+        format: battleFormat,
+        totalEntries: battleEntries,
+        customTurnSeconds: seconds,
+      });
+    }
+  }, [isHost, battleFormat, battleEntries]);
+
+  // ─── Start Cachipum (host only) ───
+  const handleStartCachipum = useCallback(() => {
+    if (!isHost) return;
+    if (!battleFormat) return;
+    cachipumProcessingRef.current = false;
     setShowCachipum(true);
     setCachipumRound(1);
     setCachipumChoices(new Map());
     setCachipumResults([]);
     setCachipumWinner(null);
     setCachipumStarter(null);
-  }, [isHost]);
+    // Enviar mensaje a otros clientes para iniciar cachipum
+    signalingRef.current?.send({
+      type: 'cachipum-start',
+    });
+  }, [isHost, battleFormat]);
 
   // ─── Cachipum Logic ───
   const handleCachipumChoice = useCallback((choice: CachipumChoice) => {
@@ -997,178 +1660,106 @@ function RoomPageContent() {
 
   const checkAllCachipumChoicesComplete = useCallback(() => {
     setCachipumChoices(currentChoices => {
-      const allUsers = [userIdRef.current, ...Array.from(peers.keys())];
+      const currentPeers = peersRef.current;
+      const allUsers = [userIdRef.current, ...Array.from(currentPeers.keys())];
       const allComplete = allUsers.every(userId => {
         const choices = currentChoices.get(userId);
         return choices && choices.length === 3;
       });
       
       if (allComplete && isHost) {
-        // Procesar rondas con las opciones actuales
-        // Usar un setTimeout más largo para asegurar que todos los mensajes se hayan procesado
-        setTimeout(() => {
-          // Usar el estado actualizado de choices
-          setCachipumChoices(finalChoices => {
-            // Obtener todos los usuarios de nuevo para asegurar que tenemos la lista actualizada
-            // Usar peersRef para obtener la lista más actualizada
-            const currentPeers = peersRef.current;
-            const allUsersForProcessing = [userIdRef.current, ...Array.from(currentPeers.keys())];
+        if (cachipumProcessingRef.current) return currentChoices;
+        cachipumProcessingRef.current = true;
+        // Procesar rondas inmediatamente cuando todos completan
+        setCachipumChoices(finalChoices => {
+          const allUsersForProcessing = [userIdRef.current, ...Array.from(peersRef.current.keys())];
+          
+          // Verificar que todos los usuarios tienen 3 opciones
+          const allHave3Choices = allUsersForProcessing.every(userId => {
+            const choices = finalChoices.get(userId);
+            return choices && choices.length === 3;
+          });
+          
+          if (!allHave3Choices) {
+            cachipumProcessingRef.current = false;
+            return finalChoices; // No procesar si no todos tienen 3 opciones
+          }
+          
+          const results: CachipumRoundResult[] = [];
+          for (let round = 1; round <= 3; round++) {
+            const roundChoices = new Map<string, CachipumChoice>();
             
-            // Debug: verificar estado antes de procesar
-            console.log('=== checkAllCachipumChoicesComplete ===');
-            console.log('All users for processing:', allUsersForProcessing);
-            console.log('Peers keys (from ref):', Array.from(currentPeers.keys()));
-            console.log('Peers keys (from state):', Array.from(peers.keys()));
-            console.log('Final choices entries:', Array.from(finalChoices.entries()));
-            
-            // Verificar que todos los usuarios tienen 3 opciones
-            const allHave3Choices = allUsersForProcessing.every(userId => {
+            allUsersForProcessing.forEach(userId => {
               const choices = finalChoices.get(userId);
-              const has3 = choices && choices.length === 3;
-              console.log(`User ${userId} has 3 choices:`, has3, choices);
-              return has3;
+              if (choices && choices.length >= round && choices[round - 1]) {
+                roundChoices.set(userId, choices[round - 1]);
+              }
             });
             
-            if (!allHave3Choices) {
-              console.error('ERROR: Not all users have 3 choices yet!', {
-                allUsers: allUsersForProcessing,
-                choicesState: Array.from(finalChoices.entries())
-              });
-              return finalChoices; // No procesar si no todos tienen 3 opciones
-            }
-            
-            // Debug: verificar el estado de choices antes de procesar
-            console.log('Final choices state:', Array.from(finalChoices.entries()));
-            console.log('All users for processing:', allUsersForProcessing);
-            
-            const results: CachipumRoundResult[] = [];
-            for (let round = 1; round <= 3; round++) {
-              const roundChoices = new Map<string, CachipumChoice>();
-              
-              // Debug antes de procesar
-              console.log(`\n=== Processing Round ${round} ===`);
-              console.log('All users for processing:', allUsersForProcessing);
-              console.log('Final choices state:', Array.from(finalChoices.entries()));
-              
-              allUsersForProcessing.forEach(userId => {
-                const choices = finalChoices.get(userId);
-                console.log(`User ${userId}:`, {
-                  allChoices: choices,
-                  roundChoice: choices ? choices[round - 1] : undefined,
-                  hasChoice: choices && choices[round - 1] ? 'YES' : 'NO'
-                });
-                
-                if (choices && choices.length >= round && choices[round - 1]) {
-                  roundChoices.set(userId, choices[round - 1]);
-                  console.log(`✓ Added choice for user ${userId} in round ${round}:`, choices[round - 1]);
-                } else {
-                  console.error(`✗ No choice found for user ${userId} in round ${round}`, {
-                    choices: choices,
-                    choicesLength: choices?.length,
-                    roundIndex: round - 1
-                  });
-                }
-              });
-              
-              // Debug: verificar que tenemos todas las elecciones
-              console.log(`Round ${round} final choices:`, Array.from(roundChoices.entries()));
-              console.log(`Round ${round} choices size:`, roundChoices.size);
-              
-              if (roundChoices.size < allUsersForProcessing.length) {
-                console.error(`ERROR: Round ${round} only has ${roundChoices.size} choices, expected ${allUsersForProcessing.length}`);
-              }
-              
-              const winners = determineRoundWinners(roundChoices);
-              const result: CachipumRoundResult = {
-                round,
-                choices: roundChoices,
-                winners,
-              };
-              results.push(result);
-              signalingRef.current?.send({
-                type: 'cachipum-round-result',
-                round,
-                choices: Object.fromEntries(roundChoices),
-                winners,
-              });
-            }
-            
-            // Procesar resultados fuera del setState para evitar problemas de scope
-            setTimeout(() => {
-              setCachipumResults(results);
-              const winner = determineCachipumWinner(results);
-              if (winner) {
-                setCachipumWinner(winner);
-                signalingRef.current?.send({
-                  type: 'cachipum-winner',
-                  winnerId: winner,
-                });
-                // Iniciar animación de rondas - comenzar con la primera ronda
-                setCurrentCachipumRoundDisplay(1);
-                setShowCachipumAnimation(true);
-                startCachipumAnimation(results, winner);
-              } else {
-                // Si hay empate en las 3 rondas, reiniciar cachipum
-                setCachipumChoices(new Map());
-                setCachipumResults([]);
-                setCachipumRound(1);
-                setCachipumWinner(null);
-                setShowCachipumAnimation(false);
-                setCurrentCachipumRoundDisplay(0);
-                signalingRef.current?.send({
-                  type: 'cachipum-restart',
-                });
-              }
-            }, 0);
-            
-            return finalChoices;
-          });
-        }, 100);
+            const winners = determineRoundWinners(roundChoices);
+            const result: CachipumRoundResult = {
+              round,
+              choices: roundChoices,
+              winners,
+            };
+            results.push(result);
+            signalingRef.current?.send({
+              type: 'cachipum-round-result',
+              round,
+              choices: Object.fromEntries(roundChoices),
+              winners,
+            });
+          }
+          
+          // Procesar resultados inmediatamente
+          setCachipumResults(results);
+          const winner = determineCachipumWinner(results);
+          if (winner) {
+            setCachipumWinner(winner);
+            signalingRef.current?.send({
+              type: 'cachipum-winner',
+              winnerId: winner,
+            });
+            // La animación se abre en el useEffect cuando cachipumWinner && cachipumResults.length === 3
+          } else {
+            // Si hay empate en las 3 rondas, reiniciar cachipum
+            cachipumProcessingRef.current = false;
+            setCachipumChoices(new Map());
+            setCachipumResults([]);
+            setCachipumRound(1);
+            setCachipumWinner(null);
+            setShowCachipumAnimation(false);
+            setCurrentCachipumRoundDisplay(0);
+            setShowCachipum(true); // Reabrir modal para jugar de nuevo
+            signalingRef.current?.send({
+              type: 'cachipum-restart',
+            });
+          }
+          
+          return finalChoices;
+        });
       }
       
       return currentChoices;
     });
-  }, [peers, isHost]);
+  }, [isHost]);
 
-  // Animación secuencial de rondas - mostrar una ronda a la vez en el mismo modal
+  // Animación: mostrar las 3 rondas a la vez en una sola ventana; tras un delay, cerrar y mostrar decisión/perdedor
   const startCachipumAnimation = useCallback((results: CachipumRoundResult[], winner: string) => {
-    if (results.length === 0) return;
-    
-    let currentRound = 1; // Comenzar desde la primera ronda (ya está mostrada)
-    const maxRounds = results.length;
-    let animationTimeout: NodeJS.Timeout | null = null;
-    
-    const showNextRound = () => {
-      // Verificar si hay ganador en la ronda actual
-      const roundResult = results[currentRound - 1];
-      if (roundResult.winners.length === 1) {
-        // Hay ganador, mantener esta ronda visible por 3 segundos y luego mostrar resumen final
-        animationTimeout = setTimeout(() => {
-          setCurrentCachipumRoundDisplay(-1); // -1 = mostrar solo resumen final (ganador)
-        }, 3000);
+    if (results.length === 0) return () => {};
+    let cancelled = false;
+    const id = setTimeout(() => {
+      if (cancelled) return;
+      setShowCachipumAnimation(false);
+      if (winner === userIdRef.current) {
+        setShowCachipumDecision(true);
       } else {
-        // Hay empate, mostrar siguiente ronda después de 2.5 segundos
-        if (currentRound < maxRounds) {
-          currentRound++;
-          setCurrentCachipumRoundDisplay(currentRound);
-          animationTimeout = setTimeout(showNextRound, 2500);
-        } else {
-          // Si se acabaron las rondas y hay empate, mostrar resumen final después de 2.5 segundos
-          animationTimeout = setTimeout(() => {
-            setCurrentCachipumRoundDisplay(-1); // -1 = mostrar solo resumen final
-          }, 2500);
-        }
+        setShowCachipumLoser(true);
       }
-    };
-    
-    // Esperar un momento antes de avanzar a la siguiente ronda (la primera ya está mostrada)
-    animationTimeout = setTimeout(showNextRound, 2500);
-    
-    // Retornar función de limpieza
+    }, 4000); // 4 segundos para ver las 3 rondas
     return () => {
-      if (animationTimeout) {
-        clearTimeout(animationTimeout);
-      }
+      cancelled = true;
+      clearTimeout(id);
     };
   }, []);
 
@@ -1180,75 +1771,29 @@ function RoomPageContent() {
     }
   }, [showCachipumAnimation, cachipumResults, cachipumWinner, startCachipumAnimation]);
 
-  const processCachipumRounds = useCallback(() => {
-    if (!isHost) return;
-    
-    const allUsers = [userIdRef.current, ...Array.from(peers.keys())];
-    const results: CachipumRoundResult[] = [];
-    
-    // Procesar las 3 rondas
-    for (let round = 1; round <= 3; round++) {
-      const roundChoices = new Map<string, CachipumChoice>();
-      
-      allUsers.forEach(userId => {
-        const choices = cachipumChoices.get(userId);
-        if (choices && choices[round - 1]) {
-          roundChoices.set(userId, choices[round - 1]);
-        }
-      });
-      
-      const winners = determineRoundWinners(roundChoices);
-      
-      const result: CachipumRoundResult = {
-        round,
-        choices: roundChoices,
-        winners,
-      };
-      
-      results.push(result);
-      
-      // Enviar resultado de la ronda
-      signalingRef.current?.send({
-        type: 'cachipum-round-result',
-        round,
-        choices: Object.fromEntries(roundChoices),
-        winners,
-      });
-    }
-    
-    setCachipumResults(results);
-    
-    // Determinar ganador final
-    const winner = determineCachipumWinner(results);
-    if (winner) {
-      setCachipumWinner(winner);
-      signalingRef.current?.send({
-        type: 'cachipum-winner',
-        winnerId: winner,
-      });
-      
-      // Mostrar animación
+  // Abrir animación solo cuando tengamos ganador y los 3 resultados (evita orden de mensajes en red)
+  useEffect(() => {
+    if (cachipumWinner && cachipumResults.length === 3) {
       setShowCachipumAnimation(true);
-      setTimeout(() => {
-        setShowCachipumAnimation(false);
-        if (winner === userIdRef.current) {
-          setShowCachipumDecision(true);
-        }
-      }, 5000); // 5 segundos de animación
     }
-  }, [isHost, cachipumChoices, peers]);
+  }, [cachipumWinner, cachipumResults.length]);
 
   const handleCachipumStarterSelection = useCallback((starterId: string) => {
     if (cachipumWinner !== userIdRef.current) return;
     
     setCachipumStarter(starterId);
+    // Actualizar el ref inmediatamente para evitar problemas de timing
+    cachipumStarterRef.current = starterId;
     setShowCachipumDecision(false);
     setShowCachipum(false);
     
-    signalingRef.current?.send({
-      type: 'cachipum-starter-selected',
-      starterId,
-    });
+    // Enviar el mensaje al host y a todos los peers
+    if (signalingRef.current) {
+      signalingRef.current.send({
+        type: 'cachipum-starter-selected',
+        starterId,
+      });
+    }
   }, [cachipumWinner]);
 
   // ─── Initialize beat offsets with default values ───
@@ -1379,44 +1924,16 @@ function RoomPageContent() {
   );
   const somePeerFailed = Array.from(peers.values()).some(p => p.connectionState === 'failed');
 
-  // ─── Countdown Logic ───
+  // ─── Start Battle Logic (sin countdown) ───
   useEffect(() => {
-    if ((battleStarted || !isReady || !allPeersReady) && countdownIntervalRef.current) {
-      clearInterval(countdownIntervalRef.current);
-      countdownIntervalRef.current = null;
-      countdownStartedRef.current = false;
-      if (battleStarted) setCountdown(null);
-      return;
-    }
-
-    if (isReady && allPeersReady && !battleStarted && !countdownStartedRef.current) {
-      countdownStartedRef.current = true;
-      let count = 3;
-      setCountdown(count);
-
-      countdownIntervalRef.current = setInterval(() => {
-        count--;
-        if (count > 0) {
-          setCountdown(count);
-        } else {
-          setCountdown(0);
-          if (countdownIntervalRef.current) {
-            clearInterval(countdownIntervalRef.current);
-            countdownIntervalRef.current = null;
-          }
-          countdownStartedRef.current = false;
-
-          if (isHost && signalingRef.current) {
-            const startTime = Date.now() + 500;
-            signalingRef.current.send({
-              type: 'start-battle',
-              timestamp: startTime,
-            });
-            setCountdown(null);
-            startBattle(startTime);
-          }
-        }
-      }, 1000);
+    // Iniciar batalla inmediatamente cuando ambos estén listos
+    if (isReady && allPeersReady && !battleStarted && isHost && signalingRef.current) {
+      const startTime = Date.now() + 500;
+      signalingRef.current.send({
+        type: 'start-battle',
+        timestamp: startTime,
+      });
+      startBattle(startTime);
     }
   }, [isReady, allPeersReady, battleStarted, isHost, startBattle]);
 
@@ -1445,149 +1962,253 @@ function RoomPageContent() {
   return (
     <div className={styles.container} onClick={handleContainerClick}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Sala: {roomId}</h1>
+        <div className={styles.headerRow}>
+          <h1 className={styles.title}>Sala: {roomId}</h1>
+          <div className={styles.headerActions}>
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className={styles.headerIconButton}
+              aria-label="Abrir configuración"
+              title="Configuración"
+            >
+              ⚙️
+            </button>
+            <button
+              type="button"
+              onClick={handleLeaveRoom}
+              className={styles.headerIconButton}
+              aria-label="Salir de la sala"
+              title="Salir de la sala"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
         <div className={styles.players}>
-          <div className={styles.player}>
-            <span className={styles.playerLabel}>Tu:</span>
-            <span className={styles.playerName}>{nickname}</span>
-            {isReady && <span className={styles.readyBadge}>&#10003; Listo</span>}
+          <div className={`${styles.player} ${isReady ? styles.playerReady : ''}`}>
+            <div className={styles.micLevelBar} style={{ width: `${localMicLevel * 100}%` }} aria-hidden />
+            <div className={styles.playerContent}>
+              <span className={styles.playerLabel}>Tu:</span>
+              <span className={styles.playerName}>{nickname}</span>
+            </div>
           </div>
           {Array.from(peers.values()).map(peer => (
-            <div key={peer.userId} className={styles.player}>
-              <span className={styles.playerLabel}>Rival:</span>
-              <span className={styles.playerName}>{peer.nickname}</span>
-              {peer.isReady && <span className={styles.readyBadge}>&#10003; Listo</span>}
-              {peer.connectionState === 'connected' && <span className={styles.connectedBadge}>&#128266;</span>}
-              {peer.connectionState === 'connected' && (
-                <div className={styles.playerVolumeControl}>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={remoteVolumes.get(peer.userId) ?? 1}
-                    onChange={(e) => setRemoteVolume(peer.userId, parseFloat(e.target.value))}
-                    onTouchStart={() => audioContextManager.unlockFromGesture()}
-                    className={styles.playerVolumeSlider}
-                  />
-                  <span className={styles.playerVolumeLabel}>
-                    {Math.round((remoteVolumes.get(peer.userId) ?? 1) * 100)}%
-                  </span>
-                </div>
-              )}
+            <div key={peer.userId} className={`${styles.player} ${peer.isReady ? styles.playerReady : ''}`}>
+              <div className={styles.micLevelBar} style={{ width: `${(remoteMicLevels.get(peer.userId) ?? 0) * 100}%` }} aria-hidden />
+              <div className={styles.playerContent}>
+                <span className={styles.playerLabel}>Rival:</span>
+                <span className={styles.playerName}>{peer.nickname}</span>
+                {peer.connectionState === 'connected' && <span className={styles.connectedBadge}>&#128266;</span>}
+                {peer.connectionState === 'connected' && (
+                  <div className={styles.playerVolumeControl}>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={remoteVolumes.get(peer.userId) ?? 1}
+                      onChange={(e) => setRemoteVolume(peer.userId, parseFloat(e.target.value))}
+                      onTouchStart={() => audioContextManager.unlockFromGesture()}
+                      className={styles.playerVolumeSlider}
+                    />
+                    <span className={styles.playerVolumeLabel}>
+                      {Math.round((remoteVolumes.get(peer.userId) ?? 1) * 100)}%
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
           {peers.size === 0 && (
             <div className={styles.player}>
-              <span className={styles.waiting}>Esperando rivales...</span>
+              <div className={styles.playerContent}>
+                <span className={styles.waiting}>Esperando rivales...</span>
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      <div className={styles.status}>
-        {!websocketConnected && (
-          <div>
-            <p className={styles.statusText}>Conectando al servidor...</p>
-          </div>
-        )}
-        {websocketConnected && !hasPeers && (
-          <p className={styles.statusText}>Esperando que se unan otros jugadores...</p>
-        )}
-        {websocketConnected && hasPeers && somePeerConnecting && !somePeerFailed && (
-          <div>
-            <p className={styles.statusText}>Estableciendo conexion de audio...</p>
-            {!localStream && (
-              <p className={styles.statusText} style={{ fontSize: '0.85rem', color: '#f5576c', marginTop: '0.5rem' }}>
-                Microfono no disponible. Podras escuchar pero no hablar.
-              </p>
-            )}
-            {localStream && (
-              <p className={styles.statusText} style={{ fontSize: '0.85rem', color: '#10b981', marginTop: '0.5rem' }}>
-                Microfono conectado
-              </p>
-            )}
-          </div>
-        )}
-        {somePeerFailed && (
-          <p className={styles.statusText} style={{ color: '#f5576c' }}>
-            Error de conexion con un rival. Recarga la pagina para reintentar.
-          </p>
-        )}
-        {allPeersConnected && !isReady && !allPeersReady && (
-          <p className={styles.statusText}>Presiona &quot;Estoy listo&quot; cuando estes preparado</p>
-        )}
-        {isReady && !allPeersReady && (
-          <p className={styles.statusText}>Esperando que todos esten listos...</p>
-        )}
-        {isReady && allPeersReady && countdown !== null && countdown > 0 && !battleStarted && (
-          <div className={styles.countdown}>{countdown}</div>
-        )}
-        {isReady && allPeersReady && countdown === 0 && !battleStarted && (
-          <div className={styles.countdown} style={{ color: '#f5576c', fontSize: '4rem' }}>GO!</div>
-        )}
-        {battleStarted && (
-          <div className={styles.battleActive}>
-            {currentTurn && (
-              <p className={styles.battleText}>
-                {currentTurn.userId === userIdRef.current 
-                  ? nickname 
-                  : peers.get(currentTurn.userId)?.nickname || 'Desconocido'}
-              </p>
-            )}
-            {currentTurn && (
-              <div className={styles.turnInfo}>
-                <p className={styles.turnNumber}>Turno #{currentTurn.turnNumber}</p>
-              </div>
-            )}
-            {turnProgress && battleFormat && (
-              <div className={styles.progressInfo}>
-                <div className={styles.timeProgress}>
-                  <div className={styles.pieChartContainer}>
-                    <svg className={styles.pieChart} viewBox="0 0 100 100">
-                      <circle
-                        className={styles.pieChartBackground}
-                        cx="50"
-                        cy="50"
-                        r="45"
-                      />
-                      <circle
-                        className={styles.pieChartProgress}
-                        cx="50"
-                        cy="50"
-                        r="45"
-                        style={{
-                          strokeDasharray: `${2 * Math.PI * 45}`,
-                          strokeDashoffset: `${2 * Math.PI * 45 * (1 - (turnProgress.timeRemaining / (getBattleFormatConfig(battleFormat).timePerTurnSeconds || 60)))}`,
-                        }}
-                      />
-                      <text
-                        x="50"
-                        y="50"
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        className={styles.pieChartText}
-                      >
-                        {turnProgress.timeRemaining}s
-                      </text>
-                    </svg>
+      {/* Botón "Iniciar Cachipum" - debajo de participantes, antes de la pantalla (solo host) */}
+      {!battleStarted && websocketConnected && isHost && battleFormat && allPeersConnected && hasPeers && !cachipumStarter && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem', marginBottom: '1rem' }}>
+          <button
+            onClick={handleStartCachipum}
+            className={styles.cachipumStartButton}
+          >
+            Iniciar Cachipum
+          </button>
+        </div>
+      )}
+
+      {/* Pantalla - siempre visible, tamaño fijo */}
+      <div className={styles.battleActive}>
+        <div className={styles.screenFrame}>
+              {battleStarted && currentTurn ? (
+                <>
+                  <p className={styles.battleText}>
+                    {/* Usar SIEMPRE el nickname que viene del mensaje turn-started del host */}
+                    {/* Esto garantiza que todos vean exactamente el mismo nombre */}
+                    {(currentTurn as any).nickname || currentTurn.userId}
+                  </p>
+                  <div className={styles.turnInfo}>
+                    <p className={styles.turnNumber}>Turno #{currentTurn.turnNumber}</p>
                   </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+                  {turnProgress && battleFormat && (
+                    <div className={styles.progressInfo}>
+                      <div className={styles.timeProgress}>
+                        <div className={styles.pieChartContainer}>
+                          <svg className={styles.pieChart} viewBox="0 0 100 100">
+                            <circle
+                              className={styles.pieChartBackground}
+                              cx="50"
+                              cy="50"
+                              r="45"
+                            />
+                            <circle
+                              className={styles.pieChartProgress}
+                              cx="50"
+                              cy="50"
+                              r="45"
+                              style={{
+                                strokeDasharray: `${2 * Math.PI * 45}`,
+                                strokeDashoffset: `${2 * Math.PI * 45 * (1 - ('timeRemaining' in turnProgress ? turnProgress.timeRemaining : 0) / (customTurnSeconds || getBattleFormatConfig(battleFormat).timePerTurnSeconds || 60))}`,
+                              }}
+                            />
+                            <text
+                              x="50"
+                              y="50"
+                              textAnchor="middle"
+                              dominantBaseline="middle"
+                              className={styles.pieChartText}
+                            >
+                              {'timeRemaining' in turnProgress ? turnProgress.timeRemaining : 0}s
+                            </text>
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {cachipumStarter ? (
+                    <p className={styles.battleText}>
+                      {cachipumStarter === userIdRef.current 
+                        ? nickname 
+                        : peersRef.current.get(cachipumStarter)?.nickname || peers.get(cachipumStarter)?.nickname || cachipumStarter}
+                    </p>
+                  ) : (
+                    <p className={styles.battleText} style={{ color: '#888' }}>Esperando...</p>
+                  )}
+                  {!battleStarted && (
+                    <div className={styles.turnInfo}>
+                      <p className={styles.turnNumber} style={{ color: '#888' }}>Preparando batalla</p>
+                    </div>
+                  )}
+                  {/* Botones para abrir selectores (solo host) */}
+                  {!battleStarted && websocketConnected && isHost && (
+                    <div className={styles.screenConfigButtons}>
+                      <button
+                        onClick={() => setIsBeatModalOpen(true)}
+                        className={styles.screenConfigButton}
+                      >
+                        🎵 Beat: Beat {selectedBeat}
+                      </button>
+                      <button
+                        onClick={() => setIsFormatModalOpen(true)}
+                        className={styles.screenConfigButton}
+                      >
+                        📋 {battleFormat ? (
+                          battleFormat === '4x4' ? '4x4' :
+                          battleFormat === '8x8' ? '8x8' :
+                          'Minuto Libre'
+                        ) : 'Formato'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Mostrar configuración seleccionada (solo lectura para no-host) */}
+                  {!battleStarted && !isHost && (selectedBeat || battleFormat) && (
+                    <div className={styles.configDisplay}>
+                      {selectedBeat && (
+                        <div className={styles.configItem}>
+                          <span className={styles.configLabel}>Beat:</span>
+                          <span className={styles.configValue}>Beat {selectedBeat}</span>
+                        </div>
+                      )}
+                      {battleFormat && (
+                        <div className={styles.configItem}>
+                          <span className={styles.configLabel}>Formato:</span>
+                          <span className={styles.configValue}>
+                            {battleFormat === '4x4' && '4x4 (4 versos de 4 líneas)'}
+                            {battleFormat === '8x8' && '8x8 (8 versos de 8 líneas)'}
+                            {battleFormat === 'minuto-libre' && 'Minuto Libre (60 segundos)'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+        </div>
       </div>
+
+      {/* Control de volumen del beat - debajo de la pantalla */}
+      {websocketConnected && (
+        <div className={styles.beatVolumeControl}>
+          <label className={styles.controlLabel}>
+            Volumen Beat: {Math.round(beatVolume * 100)}%
+          </label>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={beatVolume}
+            onChange={(e) => setBeatVolume(parseFloat(e.target.value))}
+            onTouchStart={() => audioContextManager.unlockFromGesture()}
+            className={styles.slider}
+          />
+        </div>
+      )}
+
+      {/* Botón "Estoy listo" / "No estoy listo" - siempre visible, entre volumen y footer */}
+      {!battleStarted && websocketConnected && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1rem', marginBottom: '1rem' }}>
+          {!isReady ? (
+            <button 
+              onClick={handleReady}
+              className={`${styles.readyButton} ${allPeersConnected && hasPeers && battleFormat && cachipumStarter ? styles.readyButtonAnimated : ''}`}
+              disabled={!allPeersConnected || !hasPeers || !battleFormat || !cachipumStarter}
+            >
+              Estoy listo
+            </button>
+          ) : (
+            <button 
+              onClick={handleNotReady}
+              className={`${styles.readyButton} ${styles.notReadyButton}`}
+            >
+              No estoy listo
+            </button>
+          )}
+        </div>
+      )}
 
       {battleStarted && beatAudio && isHost && (
         <div className={styles.beatControls}>
           <label className={styles.label}>Controles del Beat:</label>
           <div className={styles.beatButtons}>
             <button onClick={toggleBeat} className={styles.beatButton}>
-              {isBeatPlaying ? 'Pausar' : 'Reproducir'}
+              ⏸️ Pausar/Reproducir
             </button>
             <button onClick={restartBeat} className={styles.beatButton}>
-              Reiniciar
+              🔄 Reiniciar Beat
+            </button>
+          </div>
+          <div className={styles.battleResetContainer}>
+            <button onClick={resetBattle} className={`${styles.beatButton} ${styles.resetBattleButton}`}>
+              Reiniciar Batalla
             </button>
           </div>
         </div>
@@ -1601,81 +2222,6 @@ function RoomPageContent() {
         </div>
       )}
 
-      {isHost && (
-        <div className={styles.beatSelector}>
-          <label className={styles.label}>Seleccionar beat:</label>
-          <div className={styles.beatButtons}>
-            {[1, 2, 3, 4].map(beatNum => {
-              const currentOffset = beatOffsets.get(beatNum) ?? getBeatIntroOffset(beatNum);
-              return (
-                <div key={beatNum} className={styles.beatItem}>
-                  <button
-                    onClick={() => handleBeatChange(beatNum)}
-                    className={`${styles.beatButton} ${selectedBeat === beatNum ? styles.beatButtonActive : ''}`}
-                  >
-                    Beat {beatNum}
-                  </button>
-                  <div className={styles.beatOffsetControl}>
-                    <label className={styles.beatOffsetLabel}>
-                      Offset: {currentOffset.toFixed(1)}s
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="60"
-                      step="0.1"
-                      value={currentOffset}
-                      onChange={(e) => handleOffsetChange(beatNum, parseFloat(e.target.value) || 0)}
-                      onTouchStart={() => audioContextManager.unlockFromGesture()}
-                      className={styles.beatOffsetInput}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {!battleStarted && websocketConnected && allPeersConnected && hasPeers && isHost && !battleFormat && (
-        <div className={styles.formatSelector}>
-          <label className={styles.label}>Seleccionar formato de batalla:</label>
-          <div className={styles.formatButtons}>
-            <button
-              onClick={() => handleFormatChange('4x4')}
-              className={styles.formatButton}
-            >
-              <div className={styles.formatButtonTitle}>4x4</div>
-              <div className={styles.formatButtonDesc}>4 versos de 4 líneas</div>
-            </button>
-            <button
-              onClick={() => handleFormatChange('8x8')}
-              className={styles.formatButton}
-            >
-              <div className={styles.formatButtonTitle}>8x8</div>
-              <div className={styles.formatButtonDesc}>8 versos de 8 líneas</div>
-            </button>
-            <button
-              onClick={() => handleFormatChange('minuto-libre')}
-              className={styles.formatButton}
-            >
-              <div className={styles.formatButtonTitle}>Minuto Libre</div>
-              <div className={styles.formatButtonDesc}>60 segundos por turno</div>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {!battleStarted && websocketConnected && allPeersConnected && hasPeers && battleFormat && (
-        <div className={styles.formatDisplay}>
-          <p className={styles.formatLabel}>Formato seleccionado:</p>
-          <p className={styles.formatValue}>
-            {battleFormat === '4x4' && '4x4 (4 versos de 4 líneas)'}
-            {battleFormat === '8x8' && '8x8 (8 versos de 8 líneas)'}
-            {battleFormat === 'minuto-libre' && 'Minuto Libre (60 segundos)'}
-          </p>
-        </div>
-      )}
 
       {showCachipum && !cachipumStarter && !showCachipumAnimation && (
         <div className={styles.cachipumContainer}>
@@ -1696,15 +2242,13 @@ function RoomPageContent() {
               <>
                 <div className={styles.cachipumProgress}>
                   <p>Opciones elegidas: {myChoices.length} / 3</p>
-                  {myChoices.length > 0 && (
-                    <div className={styles.cachipumMyChoices}>
-                      {myChoices.map((choice, index) => (
-                        <span key={index} className={styles.cachipumChoiceBadge}>
-                          Ronda {index + 1}: {getCachipumEmoji(choice)} {getCachipumLabel(choice)}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  <div className={styles.cachipumMyChoices}>
+                    {[0, 1, 2].map((index) => (
+                      <span key={index} className={styles.cachipumChoiceBadge}>
+                        {myChoices[index] ? getCachipumEmoji(myChoices[index]) : <span className={styles.cachipumEmptySlot}>?</span>}
+                      </span>
+                    ))}
+                  </div>
                 </div>
                 {myChoices.length < 3 && (
                   <div className={styles.cachipumButtons}>
@@ -1713,29 +2257,26 @@ function RoomPageContent() {
                       className={styles.cachipumButton}
                       disabled={myChoices.length >= 3}
                     >
-                      ✊ Piedra
+                      <span className={styles.cachipumEmoji}>✊</span>
+                      <span className={styles.cachipumLabel}>Piedra</span>
                     </button>
                     <button
                       onClick={() => handleCachipumChoice('papel')}
                       className={styles.cachipumButton}
                       disabled={myChoices.length >= 3}
                     >
-                      ✋ Papel
+                      <span className={styles.cachipumEmoji}>✋</span>
+                      <span className={styles.cachipumLabel}>Papel</span>
                     </button>
                     <button
                       onClick={() => handleCachipumChoice('tijera')}
                       className={styles.cachipumButton}
                       disabled={myChoices.length >= 3}
                     >
-                      ✌️ Tijera
+                      <span className={styles.cachipumEmoji}>✌️</span>
+                      <span className={styles.cachipumLabel}>Tijera</span>
                     </button>
                   </div>
-                )}
-                {myChoices.length >= 3 && !allComplete && (
-                  <p className={styles.cachipumWaiting}>Esperando que todos elijan sus 3 opciones...</p>
-                )}
-                {allComplete && (
-                  <p className={styles.cachipumProcessing}>Procesando resultados...</p>
                 )}
               </>
             );
@@ -1744,106 +2285,300 @@ function RoomPageContent() {
         </div>
       )}
 
-      {showCachipumAnimation && cachipumResults.length > 0 && (
-        <div className={styles.cachipumAnimation}>
-          <div>
-            {currentCachipumRoundDisplay === -1 ? (
-              // Mostrar solo resumen final (ganador)
-              <>
-                <h3 className={styles.cachipumTitle}>Resultados del Cachipum</h3>
-                
-                {/* Mostrar ganador final */}
-                {cachipumWinner && (
-                  <div className={styles.cachipumFinalWinner}>
-                    <h3>🏆 Ganador Final del Cachipum</h3>
-                    <p>{cachipumWinner === userIdRef.current ? nickname : peers.get(cachipumWinner)?.nickname || cachipumWinner}</p>
-                  </div>
-                )}
-                
-                {/* Botones de acción */}
-                <div className={styles.cachipumAnimationActions}>
-                  {cachipumWinner && cachipumWinner === userIdRef.current && (
-                    <button
-                      onClick={() => {
-                        setShowCachipumAnimation(false);
-                        setShowCachipumDecision(true);
-                      }}
-                      className={styles.cachipumContinueButton}
-                    >
-                      Continuar
-                    </button>
-                  )}
-                  {(!cachipumWinner || cachipumWinner !== userIdRef.current) && (
-                    <button
-                      onClick={() => {
-                        setShowCachipumAnimation(false);
-                      }}
-                      className={styles.cachipumContinueButton}
-                    >
-                      Cerrar
-                    </button>
-                  )}
-                </div>
-              </>
-            ) : currentCachipumRoundDisplay > 0 ? (
-              // Mostrar ronda individual secuencialmente
-              (() => {
-                const result = cachipumResults[currentCachipumRoundDisplay - 1];
-                if (!result) return null;
-                
-                const roundNumber = currentCachipumRoundDisplay;
+      {showCachipumAnimation && cachipumResults.length > 0 && (() => {
+        const sorted = [...cachipumResults].sort((a, b) => a.round - b.round);
+        const winningRoundIndex = sorted.findIndex(r => r.winners.length === 1);
+        const roundsToShow = winningRoundIndex >= 0
+          ? sorted.slice(0, winningRoundIndex + 1)
+          : sorted;
+        return (
+          <div className={styles.cachipumAnimation}>
+            <div>
+              <h3 className={styles.cachipumTitle}>Resultados Cachipum</h3>
+              {roundsToShow.map((result, idx) => {
+                const roundNumber = idx + 1;
                 const hasWinner = result.winners.length === 1;
-                const allUsersInRoom = [userIdRef.current, ...Array.from(peers.keys())];
-                
+                const allUsersInRoom = [userIdRef.current, ...Array.from(peersRef.current.keys())];
                 return (
-                  <>
-                    <h3 className={styles.cachipumTitle}>Ronda {roundNumber}</h3>
-                    
-                    <div className={styles.cachipumVsContainer}>
-                      {allUsersInRoom.map((userId, idx) => {
+                  <div key={`round-${roundNumber}`} className={styles.cachipumRoundContent}>
+                    <h4 className={styles.cachipumRoundTitle}>Ronda {roundNumber}</h4>
+                    <div className={styles.cachipumRoundResults}>
+                      {allUsersInRoom.map((userId, index) => {
                         const choice = result.choices.get(userId);
                         const userNickname = userId === userIdRef.current 
                           ? nickname 
-                          : peers.get(userId)?.nickname || userId;
+                          : peersRef.current.get(userId)?.nickname || peers.get(userId)?.nickname || userId;
                         const isWinner = hasWinner && result.winners[0] === userId;
-                        
+                        const isLoser = hasWinner && result.winners[0] !== userId;
                         return (
-                          <React.Fragment key={userId}>
-                            {idx > 0 && (
-                              <div className={styles.cachipumVsSeparator}>VS</div>
+                          <React.Fragment key={`${roundNumber}-${userId}`}>
+                            {index > 0 && (
+                              <div className={styles.cachipumRoundVS}>VS</div>
                             )}
-                            <div className={`${styles.cachipumVsPlayer} ${isWinner ? styles.cachipumVsWinner : ''} ${!choice ? styles.cachipumVsPlayerMissing : ''}`}>
-                              <div className={styles.cachipumVsPlayerName}>{userNickname}</div>
-                              {choice ? (
-                                <>
-                                  <div className={styles.cachipumVsChoiceEmoji}>{getCachipumEmoji(choice)}</div>
-                                  <div className={styles.cachipumVsChoiceLabel}>{getCachipumLabel(choice)}</div>
-                                </>
-                              ) : (
-                                <>
-                                  <div className={styles.cachipumVsChoiceEmoji}>❓</div>
-                                  <div className={styles.cachipumVsChoiceLabel}>Sin elección</div>
-                                </>
+                            <div 
+                              className={`${styles.cachipumRoundResult} ${isWinner ? styles.cachipumRoundResultWinner : ''} ${isLoser ? styles.cachipumRoundResultLoser : ''} ${!hasWinner ? styles.cachipumRoundResultTie : ''}`}
+                            >
+                              <div className={styles.cachipumRoundResultName}>{userNickname}</div>
+                              {choice && (
+                                <div className={styles.cachipumRoundResultChoice}>
+                                  <span className={styles.cachipumRoundResultEmoji}>{getCachipumEmoji(choice)}</span>
+                                  <span className={styles.cachipumRoundResultLabel}>{getCachipumLabel(choice)}</span>
+                                </div>
+                              )}
+                              {hasWinner && (
+                                <div className={styles.cachipumRoundResultStatus}>
+                                  {isWinner ? (
+                                    <span className={styles.cachipumRoundResultStatusText}>Ganador</span>
+                                  ) : (
+                                    <span className={styles.cachipumRoundResultStatusText}>Perdedor</span>
+                                  )}
+                                </div>
+                              )}
+                              {!hasWinner && (
+                                <div className={styles.cachipumRoundResultStatus}>
+                                  <span className={styles.cachipumRoundResultStatusText}>Empate</span>
+                                </div>
                               )}
                             </div>
                           </React.Fragment>
                         );
                       })}
                     </div>
-                    
-                    {hasWinner ? (
-                      <div className={styles.cachipumRoundWinner}>
-                        <p>🏆 Ganador: {result.winners[0] === userIdRef.current ? nickname : peers.get(result.winners[0])?.nickname || result.winners[0]}</p>
-                      </div>
-                    ) : (
-                      <div className={styles.cachipumRoundTie}>
-                        <p>Empate - Siguiente ronda...</p>
-                      </div>
-                    )}
-                  </>
+                  </div>
                 );
-              })()
-            ) : null}
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Modal de selección de Beat */}
+      {isBeatModalOpen && (
+        <div className={styles.modalOverlay} onClick={() => setIsBeatModalOpen(false)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle}>Seleccionar Beat</h3>
+              <button
+                className={styles.modalCloseButton}
+                onClick={() => setIsBeatModalOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              {/* Pestañas de beats */}
+              <div className={styles.beatTabs}>
+                {[1, 2, 3, 4].map(beatNum => {
+                  const isSelected = selectedBeat === beatNum;
+                  return (
+                    <button
+                      key={beatNum}
+                      onClick={() => handleBeatTabChange(beatNum)}
+                      className={`${styles.beatTab} ${activeBeatTab === beatNum ? styles.beatTabActive : ''} ${isSelected ? styles.beatTabSelected : ''}`}
+                    >
+                      Beat {beatNum}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Contenido de la pestaña activa */}
+              <div className={styles.beatTabContent}>
+                {[1, 2, 3, 4].map(beatNum => {
+                  if (activeBeatTab !== beatNum) return null;
+                  
+                  const currentOffset = beatOffsets.get(beatNum) ?? getBeatIntroOffset(beatNum);
+                  const isPreviewing = previewingBeat === beatNum;
+                  const isSelected = selectedBeat === beatNum;
+                  
+                  return (
+                    <div key={beatNum} className={styles.beatPreviewCard}>
+                      <div className={styles.beatPreviewHeader}>
+                        <h4 className={styles.beatPreviewTitle}>Beat {beatNum}</h4>
+                      </div>
+                      {/* Tiempo actual del beat */}
+                      {isPreviewing && (
+                        <div className={styles.beatPreviewTime}>
+                          <span className={styles.beatPreviewTimeLabel}>Tiempo:</span>
+                          <span className={styles.beatPreviewTimeValue}>
+                            {formatTime(previewBeatTime)}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className={styles.beatPreviewControls}>
+                        <button
+                          onClick={() => handleBeatPreview(beatNum)}
+                          className={`${styles.beatPreviewButton} ${isPreviewing ? (isPreviewPaused ? styles.beatPreviewButtonPaused : styles.beatPreviewButtonPlaying) : ''}`}
+                        >
+                          {isPreviewing ? (isPreviewPaused ? '▶️ Reanudar' : '⏸️ Pausar') : '▶️ Escuchar'}
+                        </button>
+                        {isPreviewing && (
+                          <button
+                            onClick={handleBeatPreviewRestart}
+                            className={styles.beatPreviewRestartButton}
+                          >
+                            🔄 Reiniciar
+                          </button>
+                        )}
+                      </div>
+                      <div className={styles.beatPreviewOffset}>
+                        <label className={styles.beatPreviewOffsetLabel}>Offset (segundos):</label>
+                        <div className={styles.beatPreviewOffsetInputGroup}>
+                          <input
+                            type="number"
+                            min="0"
+                            max="60"
+                            step="0.1"
+                            value={currentOffset}
+                            onChange={(e) => handleOffsetChange(beatNum, parseFloat(e.target.value) || 0)}
+                            onTouchStart={() => audioContextManager.unlockFromGesture()}
+                            className={styles.beatPreviewOffsetInput}
+                          />
+                          <span className={styles.beatPreviewOffsetUnit}>s</span>
+                        </div>
+                        <p className={styles.beatPreviewOffsetHint}>
+                          Ajusta el offset mientras escuchas el beat
+                        </p>
+                      </div>
+                      {/* Botón de seleccionar al final */}
+                      <div className={styles.beatSelectContainer}>
+                        <button
+                          onClick={() => {
+                            handleBeatChange(beatNum);
+                            setIsBeatModalOpen(false);
+                          }}
+                          className={`${styles.beatSelectButton} ${isSelected ? styles.beatSelectButtonActive : ''}`}
+                        >
+                          {isSelected ? '✓ Seleccionado' : 'Seleccionar'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de selección de Formato */}
+      {isFormatModalOpen && (
+        <div className={styles.modalOverlay} onClick={() => setIsFormatModalOpen(false)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle}>Seleccionar Formato</h3>
+              <button
+                className={styles.modalCloseButton}
+                onClick={() => setIsFormatModalOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              <div className={styles.screenFormatButtons}>
+                <div className={styles.screenFormatRow}>
+                  <button
+                    onClick={() => handleFormatChange('4x4')}
+                    className={`${styles.screenFormatButton} ${battleFormat === '4x4' ? styles.screenFormatButtonActive : ''}`}
+                  >
+                    <div className={styles.screenFormatButtonTitle}>4x4</div>
+                    <div className={styles.screenFormatButtonDesc}>4 versos de 4 líneas</div>
+                  </button>
+                  <button
+                    onClick={() => handleFormatChange('8x8')}
+                    className={`${styles.screenFormatButton} ${battleFormat === '8x8' ? styles.screenFormatButtonActive : ''}`}
+                  >
+                    <div className={styles.screenFormatButtonTitle}>8x8</div>
+                    <div className={styles.screenFormatButtonDesc}>8 versos de 8 líneas</div>
+                  </button>
+                </div>
+                <button
+                  onClick={() => handleFormatChange('minuto-libre')}
+                  className={`${styles.screenFormatButton} ${styles.screenFormatButtonFull} ${battleFormat === 'minuto-libre' ? styles.screenFormatButtonActive : ''}`}
+                >
+                  <div className={styles.screenFormatButtonTitle}>Minuto Libre</div>
+                  <div className={styles.screenFormatButtonDesc}>60 segundos por turno</div>
+                </button>
+              </div>
+
+              {/* Selector de número de entradas - siempre visible */}
+              <div className={styles.entriesSelector}>
+                <label className={styles.entriesLabel}>Número de entradas:</label>
+                <div className={styles.entriesButtons}>
+                  {[4, 5, 6].map(entries => (
+                    <button
+                      key={entries}
+                      onClick={() => handleEntriesChange(entries)}
+                      className={`${styles.entriesButton} ${battleEntries === entries ? styles.entriesButtonActive : ''}`}
+                      disabled={!battleFormat}
+                    >
+                      {entries}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Campo para segundos personalizados - siempre visible */}
+              <div className={styles.customSecondsSelector}>
+                <label className={styles.entriesLabel}>Segundos por turno:</label>
+                <div className={styles.customSecondsInputGroup}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={customTurnSecondsInput || (customTurnSeconds ?? (battleFormat ? getBattleFormatConfig(battleFormat).timePerTurnSeconds : 60) ?? 60).toString()}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Permitir solo números y campo vacío
+                      if (value === '' || /^\d+$/.test(value)) {
+                        setCustomTurnSecondsInput(value);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const value = e.target.value.trim();
+                      // Si el campo está vacío o inválido, usar el valor por defecto
+                      if (value === '' || parseInt(value) <= 0 || parseInt(value) > 300) {
+                        const defaultSeconds = battleFormat ? (getBattleFormatConfig(battleFormat).timePerTurnSeconds ?? 60) : 60;
+                        setCustomTurnSecondsInput(defaultSeconds.toString());
+                        if (battleFormat) {
+                          handleCustomTurnSecondsChange(defaultSeconds);
+                        }
+                      } else {
+                        // Validar y actualizar con el valor ingresado
+                        const seconds = parseInt(value);
+                        if (!isNaN(seconds) && seconds > 0 && seconds <= 300) {
+                          setCustomTurnSecondsInput(seconds.toString());
+                          if (battleFormat) {
+                            handleCustomTurnSecondsChange(seconds);
+                          }
+                        }
+                      }
+                    }}
+                    onFocus={(e) => {
+                      // Seleccionar todo el texto al hacer foco para facilitar la edición
+                      e.target.select();
+                    }}
+                    className={styles.customSecondsInput}
+                    placeholder="Segundos"
+                    disabled={!battleFormat}
+                  />
+                  <span className={styles.customSecondsUnit}>seg</span>
+                </div>
+                <p className={styles.customSecondsHint}>
+                  Escucha el beat para determinar la duración correcta
+                </p>
+              </div>
+
+              {/* Botón Aceptar */}
+              <div className={styles.formatModalActions}>
+                <button
+                  onClick={() => setIsFormatModalOpen(false)}
+                  className={styles.formatAcceptButton}
+                >
+                  Aceptar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1877,89 +2612,31 @@ function RoomPageContent() {
         </div>
       )}
 
-      {cachipumStarter && !battleStarted && (
-        <div className={styles.cachipumStarterDisplay}>
-          <p className={styles.formatLabel}>Quien parte primero:</p>
-          <p className={styles.formatValue}>
-            {cachipumStarter === userIdRef.current 
-              ? nickname 
-              : peers.get(cachipumStarter)?.nickname || cachipumStarter}
-          </p>
-        </div>
-      )}
-
-      {!battleStarted && websocketConnected && allPeersConnected && hasPeers && !isReady && battleFormat && cachipumStarter && (
-        <button onClick={handleReady} className={styles.readyButton}>
-          Estoy listo
-        </button>
-      )}
-
-      {!isHost && (
-        <div className={styles.beatSelector}>
-          <label className={styles.label}>Beat seleccionado:</label>
-          <div className={styles.beatInfo}>
-            <span className={styles.beatDisplay}>Beat {selectedBeat}</span>
-            <p style={{ color: '#888', fontSize: '0.85rem', marginTop: '0.5rem' }}>
-              El host ha seleccionado este beat
-            </p>
+      {/* Mensaje para el perdedor del cachipum */}
+      {showCachipumLoser && cachipumWinner && cachipumWinner !== userIdRef.current && (
+        <div className={styles.cachipumDecision}>
+          <div style={{ borderColor: '#f5576c' }}>
+            <h3 className={styles.cachipumTitle} style={{ color: '#f5576c' }}>Perdiste el Cachipum</h3>
+            <p className={styles.cachipumSubtitle}>El ganador decide quién parte</p>
+            <div className={styles.cachipumDecisionButtons}>
+              <button
+                onClick={() => setShowCachipumLoser(false)}
+                className={styles.cachipumDecisionButton}
+                style={{ borderColor: '#f5576c' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#f5576c';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#2a2a2a';
+                }}
+              >
+                Aceptar
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      <div className={styles.controls}>
-        <div className={styles.controlGroup}>
-          <label className={styles.controlLabel}>
-            Volumen Beat: {Math.round(beatVolume * 100)}%
-          </label>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={beatVolume}
-            onChange={(e) => setBeatVolume(parseFloat(e.target.value))}
-            onTouchStart={() => audioContextManager.unlockFromGesture()}
-            className={styles.slider}
-          />
-        </div>
-
-
-        {audioInputs.length > 0 && (
-          <div className={styles.controlGroup}>
-            <label className={styles.controlLabel}>Microfono:</label>
-            <select
-              className={styles.deviceSelect}
-              value={selectedInputId}
-              onChange={(e) => setSelectedInputId(e.target.value)}
-            >
-              <option value="">Por defecto del sistema</option>
-              {audioInputs.map(d => (
-                <option key={d.deviceId} value={d.deviceId}>
-                  {d.label || `Microfono ${d.deviceId.slice(0, 8)}`}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {audioOutputs.length > 0 && (
-          <div className={styles.controlGroup}>
-            <label className={styles.controlLabel}>Altavoz:</label>
-            <select
-              className={styles.deviceSelect}
-              value={selectedOutputId}
-              onChange={(e) => setSelectedOutputId(e.target.value)}
-            >
-              <option value="">Por defecto del sistema</option>
-              {audioOutputs.map(d => (
-                <option key={d.deviceId} value={d.deviceId}>
-                  {d.label || `Altavoz ${d.deviceId.slice(0, 8)}`}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </div>
 
       {/* Muted audio element - Safari WebRTC keep-alive only, audio routed via Web Audio API */}
       <audio
@@ -1968,6 +2645,114 @@ function RoomPageContent() {
         playsInline
         style={{ display: 'none' }}
       />
+
+      {/* Settings Sidebar */}
+      {isSettingsOpen && (
+        <>
+          <div 
+            className={styles.settingsOverlay}
+            onClick={() => setIsSettingsOpen(false)}
+          />
+          <div className={styles.settingsSidebar}>
+            <div className={styles.settingsHeader}>
+              <h2 className={styles.settingsTitle}>Configuración</h2>
+              <button
+                onClick={() => setIsSettingsOpen(false)}
+                className={styles.settingsCloseButton}
+                aria-label="Cerrar configuración"
+              >
+                ✕
+              </button>
+            </div>
+            <div className={styles.settingsContent}>
+              {/* Audio Controls Section */}
+              <div className={styles.settingsSection}>
+                {audioInputs.length > 0 && (
+                  <div className={styles.controlGroup}>
+                    <label className={styles.controlLabel}>Microfono:</label>
+                    <select
+                      className={styles.deviceSelect}
+                      value={selectedInputId}
+                      onChange={(e) => setSelectedInputId(e.target.value)}
+                    >
+                      <option value="">Por defecto del sistema</option>
+                      {audioInputs.map(d => (
+                        <option key={d.deviceId} value={d.deviceId}>
+                          {d.label || `Microfono ${d.deviceId.slice(0, 8)}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {audioOutputs.length > 0 && (
+                  <div className={styles.controlGroup}>
+                    <label className={styles.controlLabel}>Altavoz:</label>
+                    <select
+                      className={styles.deviceSelect}
+                      value={selectedOutputId}
+                      onChange={(e) => setSelectedOutputId(e.target.value)}
+                    >
+                      <option value="">Por defecto del sistema</option>
+                      {audioOutputs.map(d => (
+                        <option key={d.deviceId} value={d.deviceId}>
+                          {d.label || `Altavoz ${d.deviceId.slice(0, 8)}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Footer fijo para mensajes de estado del sistema - siempre visible */}
+      <div className={styles.statusFooter}>
+        {!websocketConnected && (
+          <div>
+            <p className={styles.statusFooterText}>Conectando al servidor...</p>
+          </div>
+        )}
+        {websocketConnected && !hasPeers && (
+          <p className={styles.statusFooterText}>Esperando que se unan otros jugadores...</p>
+        )}
+        {websocketConnected && hasPeers && somePeerConnecting && !somePeerFailed && (
+          <div>
+            <p className={styles.statusFooterText}>Estableciendo conexion de audio...</p>
+            {!localStream && (
+              <p className={styles.statusFooterText} style={{ fontSize: '0.75rem', color: '#f5576c', marginTop: '0.25rem' }}>
+                Microfono no disponible. Podras escuchar pero no hablar.
+              </p>
+            )}
+            {localStream && (
+              <p className={styles.statusFooterText} style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.25rem' }}>
+                Microfono conectado
+              </p>
+            )}
+          </div>
+        )}
+        {somePeerFailed && (
+          <p className={styles.statusFooterText} style={{ color: '#f5576c' }}>
+            Error de conexion con un rival. Recarga la pagina para reintentar.
+          </p>
+        )}
+        {isReady && !allPeersReady && (
+          <p className={styles.statusFooterText}>Esperando que todos esten listos...</p>
+        )}
+        {websocketConnected && hasPeers && allPeersConnected && !somePeerConnecting && !somePeerFailed && localStream && (
+          <p className={styles.statusFooterText} style={{ color: '#10b981' }}>
+            ✓ Conectado y listo
+          </p>
+        )}
+        {websocketConnected && hasPeers && allPeersConnected && !somePeerConnecting && !somePeerFailed && !localStream && (
+          <p className={styles.statusFooterText} style={{ color: '#888' }}>
+            ✓ Conectado (sin micrófono)
+          </p>
+        )}
+      </div>
+
     </div>
   );
 }

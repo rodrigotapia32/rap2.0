@@ -97,6 +97,76 @@
   padding: 0 1rem;
 }
 
+/* Dos acciones principales: mismo peso visual */
+.actionButtons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.primaryButton {
+  width: 100%;
+  padding: 1rem 2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.primaryButton:hover {
+  opacity: 0.9;
+}
+
+.primaryButton:active {
+  opacity: 0.8;
+}
+
+/* Bloque expandido al elegir "Unirse a sala" */
+.joinExpand {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #333;
+}
+
+.joinExpand .input {
+  text-align: center;
+  letter-spacing: 0.2em;
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+}
+
+.joinExpandActions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.joinExpandActions .primaryButton {
+  flex: 1;
+}
+
+.cancelButton {
+  padding: 1rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  background: transparent;
+  border: 2px solid #444;
+  border-radius: 8px;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancelButton:hover {
+  border-color: #666;
+  color: #ccc;
+}
+
 .button {
   width: 100%;
   padding: 1rem 2rem;

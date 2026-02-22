@@ -18,22 +18,25 @@ export type SignalingMessage =
   | { type: 'webrtc-renegotiate'; userId: string; sessionId: string }
   | { type: 'peer-disconnected'; userId: string }
   | { type: 'ready'; userId: string }
+  | { type: 'not-ready'; userId: string }
   | { type: 'start-battle'; timestamp: number; userId?: string }
+  | { type: 'battle-reset'; userId?: string }
   | { type: 'user-joined'; userId: string; nickname: string }
   | { type: 'user-left'; userId: string }
   | { type: 'beat-selected'; beatNumber: number; userId?: string }
   | { type: 'beat-play'; timestamp?: number; userId?: string }
   | { type: 'beat-pause'; userId?: string }
   | { type: 'beat-restart'; userId?: string }
-  | { type: 'battle-format-selected'; format: BattleFormat; userId?: string }
-  | { type: 'turn-started'; userId: string; turnNumber: number; startTime: number; format: BattleFormat }
+  | { type: 'battle-format-selected'; format: BattleFormat; totalEntries: number; customTurnSeconds?: number; userId?: string }
+  | { type: 'turn-started'; userId: string; turnNumber: number; startTime: number; format: BattleFormat; nickname?: string }
   | { type: 'turn-ended'; userId: string; turnNumber: number }
   | { type: 'beat-intro-offset'; beatNumber: number; offsetSeconds: number; userId?: string }
   | { type: 'cachipum-choice'; userId: string; choice: CachipumChoice; round: number }
   | { type: 'cachipum-round-result'; round: number; choices: Record<string, CachipumChoice>; winners: string[]; userId?: string }
   | { type: 'cachipum-winner'; winnerId: string; userId?: string }
   | { type: 'cachipum-starter-selected'; starterId: string; userId?: string }
-  | { type: 'cachipum-restart'; userId?: string };
+  | { type: 'cachipum-restart'; userId?: string }
+  | { type: 'cachipum-start'; userId?: string };
 
 export class SignalingClient {
   private ws: WebSocket | null = null;
