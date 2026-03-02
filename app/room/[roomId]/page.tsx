@@ -1261,19 +1261,7 @@ function RoomPageContent() {
     }
   }, [localStream]);
 
-  // ─── Turn-based microphone control ───
-  useEffect(() => {
-    if (!battleStarted || !localStream || !currentTurn) return;
-
-    const audioTracks = localStream.getAudioTracks();
-    const isMyTurn = currentTurn.userId === userIdRef.current;
-
-    audioTracks.forEach(track => {
-      track.enabled = isMyTurn;
-    });
-
-    setIsMicMuted(!isMyTurn);
-  }, [battleStarted, localStream, currentTurn]);
+  // Micrófonos siempre abiertos; no se bloquean por turno (cada uno controla el suyo con el botón de mute si quiere).
 
   // ─── Turn progress tracking ───
   useEffect(() => {
